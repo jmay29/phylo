@@ -734,22 +734,6 @@ if (length(largeBins) > 0) {
 # Make sure there is only a single row per BIN.
 dfAllSeqs <- dfAllSeqs[!duplicated(dfAllSeqs$bin_uri), ] 
 
-# TRAIT: Latitudinal range.
-# Since singletons are included, their range is automically 0. Thus, I need to
-# account for this discrepency by assigning singleton BINs an NA value.
-# First, I need a recursive vector to deal with.
-#recodedList <- lapply(unique(dfPreCentroid$bin_uri), 
- #                     function(x) dfPreCentroid[dfPreCentroid$bin_uri == x, ])
-#RecodeLatRange <- function(listOfTraitInfo) {
-  #answer <- listOfTraitInfo$lat_range
-  #if (listOfTraitInfo$sample_size == 1) {
-   # answer <- NA 
-  #} 
-  #return(answer)
-#}
-#recodedLatRanges <- sapply(recodedList, function(x) RecodeLatRange(x))
-#rm(recodedList)
-#dfPreCentroid$lat_range <- recodedLatRanges
 data <- dfAllSeqs
 
 ################################################################################
@@ -780,6 +764,7 @@ refSeqTrim <- function(data) {
   # Check sequence length.
   dfRefSeqs[, seq_length := nchar(nucleotides)]
   
+  # Remove gaps prior to aligning (when using DECIPHER)
   data$nucleotides <- data[, gsub("-", "", nucleotides)]
 
   # We must ensure that the sequences are of the chr type when all of the sequences 
@@ -808,22 +793,15 @@ refSeqTrim <- function(data) {
   # using MUSCLE. This could take several minutes depending on the number of 
   # sequences and computer speed.
   gc()
-  
   SGC1 <- getGeneticCode("SGC1")  # Vertebrate Mitochondrial code
-  Biostrings::translate(DNAStringSet1[[1]], genetic.code=SGC1, if.fuzzy.codon = "solve")
   
-  # Get the right genetic code.
-  verty <- getGeneticCode("SGC1")
-  
-  
-  # Testing 
+  # Testing use of DECIPHER.
   alignment2 <- AlignTranslation(DNAStringSet2, sense = "+", direction = "5' to 3'",
                                  readingFrame = NA,
                                  type = "DNAStringSet",
                                  geneticCode = SGC1, gapOpening = -3000, iterations = 2)
   
-  
-  
+  # Using muscle.
   alignment2 <- muscle::muscle(DNAStringSet2, diags = TRUE, gapopen = -3000)
   
   # If you want to save the alignment as a FASTA file to your current working
@@ -1054,7 +1032,6 @@ all.equal(branchLengths1, branchLengths3) # Hmm they are equal.
 mix1 <- pmlMix(~ rate, treeJC, m = 4, control = ctr)  # loglikelihood: -6164.47 AIC:  12428.94  BIC:  12604.21 
 mix2 <- logLik(optim.pml(update(treeJC, k = 4), optGamma = TRUE, control = ctr))  # 'log Lik.' -6168.579 (df=48)
 
-
 # Read the ML tree back in so I don't have to make a new tree everytime!
 treeML <- read.tree(file="MLtree.tre")
 
@@ -1099,11 +1076,9 @@ write.csv(dfRegression, file = "RegressionData.csv")
 # everytime.
 dfRegression <- read.csv(file="RegressionData.csv", header=TRUE, sep=",")
 
-
 ### SECTION 5: STATISTICS ###
 # Order the data according to the tree.
 dfRegression <- dfRegression[match(treeML$tip.label, dfRegression$bin_uri), ]
-
 
 # Continuous variables.
 # Median latitude.
@@ -1433,18 +1408,12 @@ models[which(all.aic == min(all.aic))]
 coefs[which(all.aic == min(all.aic)), ]
 all.lambda[which(all.aic == min(all.aic))]
 
-
-
-
-
 # PGLS using ape and nlme packages.
 # Cite: Modern Phylogenetic Comparative Methods and Their Application in 
 # Evolutionary Biology. Chapters 5 & 6.
 # I want to make sure dfRegression matches the order of treeNJ for downstream
 # pgls analysis.
 dfRegression <- dfRegression$bin_uri[treeML$tip.label, ]
-
-plot(treeML, main = "Maximum Likelihood Phylogeny", )
 
 # PGLS model assuming Brownian Motion.
 fitBM <- gls(branchLength ~ median_lat + numberOfNodes, 
@@ -1520,12 +1489,6 @@ for (i in 1:(dim(dat)[dfRegression])) {
 }   # End loop.
 
 
-
-
-
-
-
-
 # Look at plots of variables.
 #pairs(branchLength~latitude + avg_depth + endemicity + introducedNon + 
 #ecosystemType + salinity, data = dfRegression,  
@@ -1533,10 +1496,6 @@ for (i in 1:(dim(dat)[dfRegression])) {
 plot(branchLength ~ bodyDepth, data = dfRegression)
 reg <- gls(branchLength ~ bodyDepth, data = dfRegression)
 abline(reg, col = "red")
-
-
-
-
 
 # Phylogenetic generalized least squares analysis.
 # Utilizing the pgls() function in caper.
@@ -1552,7 +1511,6 @@ dfRegressionOpt <- dfRegression[, c(1:2, 5, 12:13, 16:18, 20:21, 23, 25, 29, 31,
                                 35:36, 38)]
 cDat <- comparative.data(data = dfRegressionOpt, phy = treeML, 
                          names.col = "bin_uri", vcv = TRUE)
-
 
 # Stepwise regression.
 fit <- pgls(branchLength ~ ., cDat, lambda = "ML")
@@ -1694,7 +1652,6 @@ summary(mod1)
 # Compare different models (model selection).
 #anova(mod1, mod2, mod3, mod4, mod5)
 #AIC(mod1, mod2, mod4, mod5)
-
 
 # Stop the clock!
 print(proc.time() - ptm)

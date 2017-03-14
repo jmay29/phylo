@@ -990,30 +990,35 @@ refSeqTrim <- function(data) {
 
 dfAllSeqs <- refSeqTrim(dfAllSeqs)
 
-# Remove extremely gappy/ungappy sequences.
+
+### ALIGNMENT QUALITY CHECKING ###
+# Here, extremely gappy/ungappy sequences are removed. These sequences are assumed
+# to contribute to misalignment of the sequences or may even be pseudogenes.
+# Manually checking of the alignment is recommended.
+
 # This will give the number of positions where an *internal* N or gap is found 
 # for each sequence.
 internalGaps <- sapply(regmatches(dfAllSeqs$nucleotides, gregexpr("[-+]", dfAllSeqs$nucleotides)), length)
   
 # Mean gap length and range.
 meanGap <- mean(internalGaps)
-extremeHighGap <- meanGap + 7
-extremeLowGap <- meanGap - 7
+extremeHighGap <- meanGap + 7  # Upper range.
+extremeLowGap <- meanGap - 7  # Lower range.
 
 # We then loop through each sequence to see if the number of gaps 
 # deviates greatly from the mean.
+# Which sequences exceed the range of meanGap +/- 7?
 extremeSeqs <- foreach(i = 1:nrow(dfAllSeqs)) %do% 
   which(internalGaps[[i]] > extremeHighGap | internalGaps[[i]] < extremeLowGap)
+# The "deviant" sequences will be flagged with a 1.
 extremeBins <- which(extremeSeqs > 0)
 
-# Subset out these higher gap and N content sequences.
-# Make sure to check the alignment for these BINs to decide whether to remove
-# them or not.
+# Subset out these sequences to look at them if desired.
 dfExtreme <- dfAllSeqs[extremeBins, ]
-# If you decide to remove all...
+# If you decide to remove all from your data:
 dfAllSeqs <- dfAllSeqs[-extremeBins, ]
 # Align and trim again without the extreme BINs/sequences.
-dfAllSeqs <- refSeqTrim(dfAllSeqs) # Check over sequences/alignment.
+dfAllSeqs <- refSeqTrim(dfAllSeqs)  # Check over sequences/alignment.
 
 
 

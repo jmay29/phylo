@@ -561,7 +561,7 @@ dfIntroductions <- data.frame(introductions(speciesNames))
 write.csv(dfIntroductions, file = "introductions_information.csv") 
 # Read in the introductions information.
 dfIntroductions <- fread("introductions_information.csv")
-colnames(dfIntroductions)[4] <- "species_name"
+colnames(dfIntroductions)[5] <- "species_name"
 
 
 ### DIET RELATED ###
@@ -582,8 +582,8 @@ colnames(dfFoodItems)[4] <- "species_name"
 
 ### DISTRIBUTION RELATED ###
 # FAO area.
-dfFAOArea <- data.frame(faoareas(speciesNames))
-write.csv(dfFoodItems, file = "fooditem_information.csv") 
+#dfFAOArea <- data.frame(faoareas(speciesNames))
+#write.csv(dfFoodItems, file = "fooditem_information.csv") 
 # Read in the diet information.
 dfFoodItems <- fread("fooditem_information.csv")
 colnames(dfFoodItems)[4] <- "species_name"
@@ -628,8 +628,8 @@ dfLengthWeight <- fread("length_weight_information.csv")
 colnames(dfLengthWeight)[4] <- "species_name"
 
 # Popchar.
-dfPopChar <- data.frame(popchar(speciesNames))
-write.csv(dfPopChar, file = "popchar_information.csv") 
+#dfPopChar <- data.frame(popchar(speciesNames))
+#write.csv(dfPopChar, file = "popchar_information.csv") 
 # Read in the popchar information.
 dfPopChar <- fread("popchar_information.csv")
 colnames(dfPopChar)[3] <- "species_name"
@@ -665,8 +665,8 @@ dfSpeed <- fread("speed_information.csv")
 colnames(dfSpeed)[4] <- "species_name"
 
 # Swimming.
-dfSwimming <- data.frame(swimming(speciesNames))
-write.csv(dfSwimming, file = "swimming_information.csv") 
+#dfSwimming <- data.frame(swimming(speciesNames))
+#write.csv(dfSwimming, file = "swimming_information.csv") 
 # Read in the swimming information.
 dfSwimming <- fread("swimming_information.csv")
 colnames(dfSwimming)[2] <- "species_name"
@@ -695,50 +695,76 @@ dfTraits <- merge(dfTraits, dfMorphologyTraits, by.x = "species_label",
 dfTraits <- merge(dfTraits, dfEcologyTraits, by.x = "species_label", 
                   by.y = "species_name", all.x = TRUE)
 
-
-# Let's try to maximize the amount of complete cases (species that have no missing data). #
-# nr of NA in columns, increasing
-y <- sort(dfTraits[, lapply(.SD, function(x) sum(is.na(x)))])
-setcolorder(dfTraits, names(y)) # now the columns are ordered - less NA first
-dfTraits[, idx := rowSums(is.na(dfTraits))] # count nr of NA in rows
-dfTraits <- dfTraits[order(idx), ] # sort by nr of NA in rows
-dfTraits[, idx := NULL] # idx not needed anymore
+### COMPLETE CASES ###
+# Let's try to maximize the amount of complete cases in our dataset (species that have no missing data). #
+# First, order the columns in dfTraits by the amount of missing data (NA values).
+dfTraitsNA <- sort(dfTraits[, lapply(.SD, function(x) sum(is.na(x)))])
+# Reorder the original dfTraits. The columns with the least amount of NA values are now first.
+setcolorder(dfTraits, names(dfTraitsNA))
+# Now, count the number of NAs in each row.
+dfTraits[, count := rowSums(is.na(dfTraits))]
+# Sort the rows by this order.
+dfTraits <- dfTraits[order(count), ]
+# Remove this count column as it is no longer needed.
+dfTraits[, count := NULL]
+# Removing the first three columns and creating a new datatable called dfTemp. 
+# These columns do not need to be considered in the complete cases as I am only looking at traits.
 dfTemp <- dfTraits[, 3:123]
 
 # Write the trait data in order to completeness to file
 #write.csv(dfTraits, file = "TraitDataCompleteness.csv")
-# now your data.table is sorted: columns with least NA to the left,  
-# rows with with least NA on top
+
+# The datatable is now sorted: columns with the least amount of NAs to the left, 
+# rows with with the least amount of NAs on top.
+# Now I want to loop through the traits, removing one column (trait) at a time
+# and count the number of complete cases. This will provide us some information
+# as to which traits would provide an adequate sample size for downstream analysis.
+# First, take the number of columns in dfTemp.
 len <- ncol(dfTemp)
+# Create a temporary variable to hold this number. This variable will hold the 
+# number of subsets to check at each iteration.
 tempLen <- len
+# Create a vector to hold the results of the loop.
 all.cc <- NULL
-# All possible complete cases.
+# Start the loop:
 for (i in 1:len) {
+  # Works best if you set dfTemp back to a dataframe.
   x <- as.data.frame(dfTemp)
+  # x is the placeholder dataframe in the loop.
   x <- x[, 1:tempLen]
+  # Determine which rows are "complete" using the "tempLen" subset of traits.
   x <- complete.cases(x)
+  # Complete rows of data will be "TRUE".
   x <- which(x == "TRUE")
+  # Find the number of complete cases.
   x <- length(x)
+  # Add it to the all.cc variable that's holding all of the results of the loop.
   all.cc[i] <- x
+  # Minus 1 from tempLen so we can check the next subset of traits.
   tempLen <- tempLen - 1
 }
 
-# Decide where to cut the datatable.
+# Decide where to cut the datatable. (i.e. Pick an adequate subset of traits that
+# maximize sample size).
+# First, name it according to the trait columns.
 names(all.cc) <- rev(colnames(dfTemp))
+# Look at the results.
 all.cc
+# fork_length seems like a good cutoff point.
 which(colnames(dfTraits) == "fork_length")
 dfTraits <- dfTraits[, 1:109] 
-# Filter the datatable so only complete cases are kept.
+# Finally, filter the original dfTraits datatable so only complete cases are kept.
 dfCompleteCases <- dfTraits %>% filter(complete.cases(.))
 
-# Removal of near zero variance traits.
+# Removal of near zero variance traits. These are traits that are invariant and 
+# that wouldn't contribute anything to the multivariate analysis.
 dfCompleteCases <- dfCompleteCases[, -nearZeroVar(dfCompleteCases)]
 
-# Merge back to dfFiltered to get all of the sequence information for each BIN.
+# Merge back to dfFiltered to obtain all of the sequence information for each BIN.
 dfPreCentroid <- merge(dfFiltered, dfCompleteCases, by = "bin_uri")
 rm(dfFiltered)
 rm(dfCompleteCases)
-# Dataframe reorganization.
+# Dataframe reorganization and renaming.
 colnames(dfPreCentroid)[6] <- "initial_bin_size"
 colnames(dfPreCentroid)[8] <- "median_lat"
 colnames(dfPreCentroid)[9] <- "lat_range"
@@ -836,6 +862,7 @@ if (length(largeBins) > 0) {
 # Make sure there is only a single row per BIN.
 dfAllSeqs <- dfAllSeqs[!duplicated(dfAllSeqs$bin_uri), ] 
 
+# For testing purposes of refSeqTrim.
 data <- dfAllSeqs
 
 ################################################################################
@@ -1119,7 +1146,7 @@ mix1 <- pmlMix(~ rate, treeJC, m = 4, control = ctr)  # loglikelihood: -6164.47 
 mix2 <- logLik(optim.pml(update(treeJC, k = 4), optGamma = TRUE, control = ctr))  # 'log Lik.' -6168.579 (df=48)
 
 # Read the ML tree back in so I don't have to make a new tree everytime!
-treeML <- read.tree(file="MLtree.tre")
+treeML <- read.tree(file = "MLtree.tre")
 
 ################################################################################
 # TRAIT: NUMBER OF NODES
@@ -1146,6 +1173,8 @@ branchLengths <- diag(vcv.phylo(treeML))  # Root to tip distances.
 dfBranchLengths <- data.frame(branchLengths)
 colnames(dfBranchLengths)[1] <- "branchLength"
 dfBranchLengths$bin_uri <- names(branchLengths)
+
+hist(dfBranchLengths$branchLength)
 
 # Merge dfBranchLengths and dfRecodedPreCent.
 dfRegression <- merge(dfBranchLengths, dfAllSeqs, by = "bin_uri")

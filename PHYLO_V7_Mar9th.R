@@ -1024,35 +1024,39 @@ dfAllSeqs <- refSeqTrim(dfAllSeqs)  # Check over sequences/alignment.
 
 ### SECTION 4: WORKING PHYLOGENY ###
 # This is the section where a working phylogeny is constructed based on the
-# centroid sequence data.
+# centroid sequence data. This is for use in phylogenetic regression in the 
+# downstream analysis. The tree built here will also be compared to one built
+# using external programs.
 # Adapting code provided by Paradis (2012) and Schliep (2016).
 
-# Convert sequences into a vector.
+# First, assign the sequences to a vector.
 alignmentSeqs <- as.character(dfAllSeqs$nucleotides)
-# Name our sequences according to BIN URIs.
+# Name our sequences according to the BIN URIs.
 names(alignmentSeqs) <- dfAllSeqs$bin_uri
 # Convert sequences to DNAStringSet format.
 DNAStringSet4 <- DNAStringSet(alignmentSeqs)
-# Convert to DNAbin object.
+# Convert to a DNAbin object so that a distance matrix may be calculated.
 dnaBIN <- as.DNAbin(DNAStringSet4)
-# Create a phyDat object for use with pml() functions.
+# Create a phyDat object for use with pml() functions (maximum likelihood methods).
 alignmentPhyDat <- as.phyDat(dnaBIN)
 
 # Create a distance matrix to build a starting neighbour joining tree.
 # Cite: Schliep (2016).
 distK80 <- dist.dna(dnaBIN, pairwise.deletion = TRUE)
 hist(distK80) # Distribution of pairwise distances.
-#distJC69 <- dist.dna(dnaBINsmall, model = "JC69", pairwise.deletion = TRUE)
-#distF84 <- dist.dna(dnaBINsmall, model = "F84", pairwise.deletion = TRUE)
-#distTN93 <- dist.dna(dnaBINsmall, model = "TN93", pairwise.deletion = TRUE)
-#distGG95 <- dist.dna(dnaBINsmall, model = "GG95", pairwise.deletion = TRUE)
-#distRaw <- dist.dna(dnaBINsmall, model = "raw", pairwise.deletion = TRUE)
+# Explore use of different substitution models.
+#distJC69 <- dist.dna(dnaBIN, model = "JC69", pairwise.deletion = TRUE)
+#distF84 <- dist.dna(dnaBIN, model = "F84", pairwise.deletion = TRUE)
+#distTN93 <- dist.dna(dnaBIN, model = "TN93", pairwise.deletion = TRUE)
+#distGG95 <- dist.dna(dnaBIN, model = "GG95", pairwise.deletion = TRUE)
+#distRaw <- dist.dna(dnaBIN, model = "raw", pairwise.deletion = TRUE)
 
 # Compare these matrices by looking at their correlations.
+# Which are different?
 #round(cor(cbind(distK80, distJC69, distF84, distTN93, distGG95, distRaw)), 3)
 
 # Compare the distances estimated from the different methods.
-# Taking a subset as they are unable to plot otherwise.
+# You must take a subset of the data as they are unable to plot otherwise.
 #layout(matrix(1:2, 1))
 #plot(distJC69, distRaw); abline(b = 1, a = 0)  # Effects of multiple substituion.
 #plot(distK80, distJC69); abline(b = 1, a = 0)  # Ts/Tv does not seem to greatly effect.
@@ -1060,21 +1064,7 @@ hist(distK80) # Distribution of pairwise distances.
 #plot(distK80, distTN93); abline(b = 1, a = 0)  # Diff rates for Ts/Tv/base freqs different no effect.
 #plot(distK80, distGG95); abline(b = 1, a = 0)  # Mess!
 
-align <- read.dna("TestActinopterygii.fas", format = "fasta")
-align <- as.matrix(align)
-
-# Histogram of pairwise distances for each codon position.
-# Checking for heterogeneity along the sequences.
-layout(matrix(1:3, 1))
-y <- numeric()
-for (i in 1:3) {
-  s <- logical(3); s[i] <- TRUE
-  y <- c(y, dist.dna(align[, s], pairwise.deletion = TRUE))
-}
-g <- gl(3, length(y) / 3)
-histogram(~ y | g, breaks = 30)
-
-# NJ Trees.
+# Create some neighbour joining trees.
 njK80 <- nj(distK80)
 njGG95 <- nj(distGG95)
 
@@ -1082,31 +1072,43 @@ njGG95 <- nj(distGG95)
 dist.topo(njK80, njGG95)
 
 # Root the tree.
-f <- function(xx) root(nj(dist.dna(xx, p = TRUE)), "AAA5492") # Experimenting.
+f <- function(xx) root(nj(dist.dna(xx, p = TRUE)), "AAA9092")
 tr <- f(dnaBIN)
 
-# Call boot.phylo.
-nj.boot <- boot.phylo(tr, as.matrix(dnaBIN), f, 100, rooted = TRUE)
+# Call boot.phylo to perform bootstrap. This may take a while.
+#nj.boot <- boot.phylo(tr, as.matrix(dnaBIN), f, 100, rooted = TRUE)
 
 # Plot the NJ tree with bootstrap values.
-plot(njK80, no.margin = TRUE)
-nodelabels(round(nj.boot / 100, 2), bg = "white")
-add.scale.bar(length = 0.01)
+#plot(njK80, no.margin = TRUE)
+#nodelabels(round(nj.boot / 100, 2), bg = "white")
+#add.scale.bar(length = 0.01)
 
-# Model selection.
-mt <- modelTest(alignmentPhyDat) # Takes a while.
-print(mt) # Print the results.
-mt[order(mt$BIC), ] # Order by BIC value.
 
-# ML Tree using phangorn.
-treeML <- pml(njK80, alignmentPhyDat)
+### MAXIMUM LIKELIHOOD TREE ###
+
+# First, let's perform a modelTest to estimate the substitution model that best
+# fits our data.
+mt <- modelTest(alignmentPhyDat)  # Takes a while.
+print(mt)  # Print the results.
+mt[order(mt$BIC), ]  # Order by BIC value.
+
+# Build a ML Tree using phangorn (pml() functions).
+# Note: These may take a while.
+# Using the NJ tree as a starting tree.
+treeML <- pml(njK80, alignmentPhyDat)  
+# Optimize the tree using the JC model.
 treeJC <- optim.pml(treeML, optNni = TRUE)
+# Optimize the tree using the HKY model.
 treeHKY <- optim.pml(treeML, model = "HKY", optNni = TRUE)
+# Optimize the tree using the HKY+G+I model.
 treeHKY.G.I <- optim.pml(update(treeML, k = 4), model = "HKY", optNni = TRUE, 
                          optGamma = TRUE, optInv = TRUE)
+# Optimize the tree using the GTR model.
 treeGTR <- optim.pml(treeML, model = "GTR", optNni = TRUE)
+# Optimize the tree using the GTR+G+I model.
 treeGTR.G.I <- optim.pml(update(treeML, k = 4), model = "GTR", optNni = TRUE, 
                          optGamma = TRUE, optInv = TRUE)
+
 # Comparing the models.
 anova(treeJC, treeHKY)
 anova(treeHKY, treeHKY.G.I)
@@ -1116,42 +1118,38 @@ AIC(treeHKY.G.I, treeGTR.G.I)
 BIC(treeHKY.G.I)
 BIC(treeGTR.G.I)
 
-# Optimize base frequency and rate matrix.
+# You are able to optimize other parameters using the pml() function.
+# Let's optimize base frequency and rate matrix.
 treeGTR.G.I.2 <- optim.pml(update(treeML, k = 4), model = "GTR", optNni = TRUE, 
                            optGamma = TRUE, optInv = TRUE, optBf = TRUE, optQ = TRUE)
-anova(treeGTR.G.I, treeGTR.G.I.2)  # No significant difference.
+anova(treeGTR.G.I, treeGTR.G.I.2)  # No significant difference compared to the first model.
 
 # SH test.
 SH.test(treeGTR.G.I, treeHKY.G.I, treeJC)
 SH.test(treeGTR.G.I, treeHKY.G.I)
 
-# Partioned models.
+# Partitioned models.
 # Estimating phylogenies based on the different codon positions.
 alignmentPhyDat
 # Create weight table based on codons.
 w <- table(attr(alignmentPhyDat, "index"), rep(1:3, length.out = 620))
 dim(w)
-# Optimize rate locally.
+# Optimize the rate locally (for each codon position).
 part1 <- pmlPart(~ rate, treeGTR.G.I, weight = w, control = ctr)  # loglikelihood: -305226.2  AIC:  618698.4  BIC:  636962.1  
 # Optimize rate and shape locally.
 part2 <- pmlPart(~ rate + shape, treeGTR.G.I, weight = w, control = ctr)  # loglikelihood: -302897.2  AIC:  614044.3  BIC:  632316.9  
-# Optimize rate, shape and nni locally.
-part3 <- pmlPart(~ rate + shape + nni, treeGTR.G.I, weight = w, control = ctr) 
-# Optimize rate, shape and nni locally.
+# Optimize rate, shape and nni locally. Takes a long time - haven't finished it yet!
 part3 <- pmlPart(~ rate + shape + nni, treeGTR.G.I, weight = w, control = ctr) 
 # Extract trees from the pmlPart object.
 trees <- pmlPart2multiPhylo(part3)
-tree1 <- trees[[1]]
-tree2 <- trees[[2]]
-tree3 <- trees[[3]]
 
 # Mixture models.
 # Higher AIC and BIC than partioned models.
-mix1 <- pmlMix(~ rate, treeJC, m = 4, control = ctr)  # loglikelihood: -6164.47 AIC:  12428.94  BIC:  12604.21 
-mix2 <- logLik(optim.pml(update(treeJC, k = 4), optGamma = TRUE, control = ctr))  # 'log Lik.' -6168.579 (df=48)
+mix1 <- pmlMix(~ rate, treeJC, m = 4, control = ctr)  
+mix2 <- logLik(optim.pml(update(treeJC, k = 4), optGamma = TRUE, control = ctr)) 
 
 # Read the ML tree back in so I don't have to make a new tree everytime!
-treeML <- read.tree(file = "MLtree.tre")
+treeGTR.G.I$tree <- read.tree(file = "MLtree.tre")
 
 ################################################################################
 # TRAIT: NUMBER OF NODES
@@ -1195,6 +1193,8 @@ write.csv(dfRegression, file = "RegressionData.csv")
 # Read the data back in so I don't have to run through the whole pipeline 
 # everytime.
 dfRegression <- read.csv(file="RegressionData.csv", header=TRUE, sep=",")
+
+
 
 ### SECTION 5: STATISTICS ###
 # Order the data according to the tree.

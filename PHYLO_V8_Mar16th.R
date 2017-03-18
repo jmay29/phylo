@@ -113,7 +113,7 @@ rm(dfInitial)
 # Download outgroup species data from BOLD.
 # Note: I am currently using the great white shark BIN AAA9092 as an outgroup. 
 # This choice of outgroup species may be altered in the near future.
-dfOutgroup <- bold_seqspec(bin = "BOLD:AAA9092", 
+dfOutgroup <- bold_seqspec(bin = "BOLD:AAA4391", 
                            geo = "all")[, c("recordID", "bin_uri", "order_name", 
                                             "species_name", "lat", "nucleotides", 
                                             "markercode")] 
@@ -159,12 +159,12 @@ dfFiltered <- dfFiltered[, initial_bin_size := length(recordID), keyby = bin_uri
 dfFiltered <- dfFiltered[, .(bin_uri, recordID, order_name, species_name,
                              markercode, initial_bin_size, nucleotides, lat)]
 
-### FILTER 4 ###
+### FILTER 3 ###
 # Filtering for COI-5P as these are the only markers we are looking at.
 setkey(dfFiltered, markercode)  # Setting a key facilitates filtering of datatables.
 dfFiltered <- dfFiltered["COI-5P"]  # Now I can just specify "COI-5P" without indicating which column.
 
-### FILTER 5 ###
+### FILTER 4 ###
 # N and gap content will interfere with the multiple sequence alignment and the 
 # alignment will give warning messages, so we need to trim sequences with high N
 # and gap content at their terminal ends.
@@ -200,7 +200,7 @@ rm(endGapN)
 rm(split)
 
 
-### FILTER 6 ###
+### FILTER 5 ###
 # Remove sequences with N/gap content above a certain threshold. In this case,
 # we will be removing sequences with greater than 1% gap/N content.
 # First, let's determine the number of positions where an *internal* N or gap is
@@ -220,7 +220,7 @@ rm(checkGapN)
 rm(i)
 rm(internalGapN)
 
-### FILTER 7 ###
+### FILTER 6 ###
 # Filter out sequences that are less than 640 bp and greater than 1000 bp. 
 # This is because extreme long or short sequence lengths can interfere with the alignment.
 # First, determine the lengths of the sequences without gaps.
@@ -234,7 +234,7 @@ rm(seqLengthCheck)
 # BIN Species Information. #
 # Here, we are obtaining information on a per BIN basis to facilitate trait 
 # matching later on in the pipeline.
-### FILTER 8 ###
+### FILTER 7 ###
 # Remove rows with no species information (removes BINs with no species data). 
 # BINs without species data would not match with any trait information down the line.
 containSpecies <- dfFiltered[, grep("[A-Z]", species_name)]
@@ -268,7 +268,7 @@ dfFiltered <- merge(dfFiltered, dfSpeciesInfo)
 rm(dfSpeciesInfo)
 
 
-### FILTER 9 ###
+### FILTER 8 ###
 # Filtering for BINs that contain only ONE species name. This removes BINs with
 # species level conflicts.
 # EDIT: I could reorder this to before species_label so it is more straightforward.
@@ -286,7 +286,6 @@ dfFiltered[, filtered_bin_size := length(recordID), by = bin_uri]
 # information is being taken from BOLD. The rest of the data will be obtained 
 # from FishBase.
 
-### FILTER 3 ###
 # Filtering for presence of a latitude value.
 containLat <- dfFiltered[, grep("[0-9]", lat)]
 dfLatitudeSpecies <- dfFiltered[containLat, ]
@@ -328,8 +327,7 @@ rm(allFish)
 dfFishBaseSpecies <- data.table(fishBaseSpecies)
 colnames(dfFishBaseSpecies)[1] <- "species_name"
 rm(fishBaseSpecies)
-dfBoldBase <- merge(dfFiltered, dfFishBaseSpecies, by.x = "species_label",
-                    by.y = "species_name")
+dfBoldBase <- merge(dfFiltered, dfFishBaseSpecies, by = "species_name")
 rm(dfFishBaseSpecies)
 # Extract species' name as a vector if trying to access trait information
 # for first time (aka haven't saved trait info in CWD yet).
@@ -368,6 +366,17 @@ dfEcosystemTraits[, count := .N, by = .(species_name, ecosystem_type)]
 # The ecosystem_type with the highest number of observations per species is then selected.
 # This data replaces the original data.
 dfEcosystemTraits[order(-count), ecosystem_type := ecosystem_type[1L], by = species_name]
+# Recode ecosystem_type for regression analyses.
+# Change the data to factor type.
+dfEcosystemTraits[, ecosystem_type := as.factor(ecosystem_type)]
+# Five-level factor type trait.
+# EDIT: Need error/flag statements when a value isn't present
+dfEcosystemTraits[, ecosystem_type := revalue(ecosystem_type, 
+                                              c("Sea/Bay/Gulf" = "1",
+                                                "River (basin)" = "2",
+                                                "Lake" = "3",
+                                                "Lagoon" = "4",
+                                                "Zoogeographic realm" = NA))]
 # Filtering for presence of env_salinity_level data. This is for the univariate analyses section.
 noET <- dfEcosystemTraits[, is.na(ecosystem_type)]
 noET <- which(noET == "TRUE")
@@ -390,10 +399,21 @@ rm(noET)
 # Create a species list for eventual master phylogeny.
 dfMasterSpecies <- dfEcosystemType[, 1]
 
+
+
 # Environmental salinity level.
 dfEcosystemTraits[, count := .N, by = .(species_name, salinity)]
 dfEcosystemTraits[order(-count), env_salinity_level := salinity[1L], by = species_name]
 dfEcosystemTraits$count <- NULL
+# Recode env_salinity_level for regression analyses.
+# Change the data to factor type.
+dfEcosystemTraits[, env_salinity_level := as.factor(env_salinity_level)]
+# Three-level factor type trait.
+# EDIT: Need error/flag statements when a value isn't present
+dfEcosystemTraits[, env_salinity_level := revalue(env_salinity_level, 
+                                                  c("freshwater" = "1", 
+                                                    "brackish" = "2", 
+                                                    "saltwater" = "3"))]
 # Filtering for presence of env_salinity_level data. This is for the univariate analyses section.
 noESL <- dfEcosystemTraits[, is.na(env_salinity_level)]
 noESL <- which(noESL == "TRUE")
@@ -416,7 +436,10 @@ rm(noESL)
 # Collect unique species.
 dfAddSpecies <- dfEnvironSalLevel[, 1]
 # Merge back to master species list.
-dfMasterSpecies <- merge(dfMasterSpecies, dfAddSpecies, by = "species_name", all.x = TRUE)
+dfMasterSpecies <- rbind(dfMasterSpecies, dfAddSpecies)
+# Keep only unique species.
+dfMasterSpecies <- dfMasterSpecies[!duplicated(dfMasterSpecies$species_name), ] 
+
 
 # Median trait(s).
 # Average depth.
@@ -446,49 +469,47 @@ rm(noAD)
 # Collect unique species.
 dfAddSpecies <- dfAverageDepth[, 1]
 # Merge back to master species list.
-dfMasterSpecies <- merge(dfMasterSpecies, dfAddSpecies, by = "species_name", all.x = TRUE)
+dfMasterSpecies <- rbind(dfMasterSpecies, dfAddSpecies)
+# Keep only unique species.
+dfMasterSpecies <- dfMasterSpecies[!duplicated(dfMasterSpecies$species_name), ]
 
 # Special cases.
 # These are traits for which additional steps are required to pick the representative value.
 # INTRODUCED VS. NOT INTRODUCED.
-DetermineIfSpeciesIntroduced <- function(x) {
-  answer <- NULL
-  containsIntroduced <- length(grep("introduced", x))
+#DetermineIfSpeciesIntroduced <- function(x) {
+ # answer <- NULL
+  #containsIntroduced <- length(grep("introduced", x))
   # If the species has ever been introduced in an area...
-  if (containsIntroduced > 0) {
+  #if (containsIntroduced > 0) {
     # It will be assigned "Yes".
-    answer <- "Yes" 
-  } else {
+   # answer <- "Yes" 
+  #} else {
     # Else, it will be assigned "No".
-    answer <- "No"
-  } 
-  return(answer)
-}
+    #answer <- "No"
+  #} 
+  #return(answer)
+#}
 
 # Apply the DetermineIfSpeciesIntroduced function to the appropriate column in the datatable.
-dfEcosystemTraits[, introduced := DetermineIfSpeciesIntroduced(status), by = species_name]
-
-
-
-
+#dfEcosystemTraits[, introduced := DetermineIfSpeciesIntroduced(status), by = species_name]
 
 # ENDEMICITY.
-DetermineIfSpeciesEndemic <- function(x) {
-  answer <- NULL
-  containsEndemic <- length(grep("endemic", x))
+#DetermineIfSpeciesEndemic <- function(x) {
+ # answer <- NULL
+  #containsEndemic <- length(grep("endemic", x))
   # If the species has ever been introduced in an area..
-  if (containsEndemic > 0) {
+  #if (containsEndemic > 0) {
     # It will be assigned "Yes".
-    answer <- "Yes" 
-  } else {
+   # answer <- "Yes" 
+  #} else {
     # Else, it will be assigned "No".
-    answer <- "No"
-  } 
-  return(answer)
-}
+   # answer <- "No"
+  #} 
+  #return(answer)
+#}
 
 # Apply the DetermineIfSpeciesEndemic function to the appropriate column in the datatable.
-dfEcosystemTraits[, endemic := DetermineIfSpeciesEndemic(status), by = species_name]
+#dfEcosystemTraits[, endemic := DetermineIfSpeciesEndemic(status), by = species_name]
 
 # SALINITY TOLERANCE
 DetermineSalinityTolerance <- function(x) {
@@ -512,6 +533,14 @@ DetermineSalinityTolerance <- function(x) {
 dfEcosystemTraits[, salinity_tolerance := DetermineSalinityTolerance(salinity), by = species_name]
 # Remove salinity column now as it is no longer needed.
 dfEcosystemTraits$salinity <- NULL
+# Recode env_salinity_level for regression analyses.
+# Change the data to factor type.
+dfEcosystemTraits[, salinity_tolerance := as.factor(salinity_tolerance)]
+# Two-level factor type trait.
+# EDIT: Need error/flag statements when a value isn't present
+dfEcosystemTraits[, salinity_tolerance := revalue(salinity_tolerance, 
+                                                  c("stenohaline" = "0", 
+                                                    "euryhaline" = "1"))]
 # Filtering for presence of salinity_tolerance data. This is for the univariate analyses section.
 noST <- dfEcosystemTraits[, is.na(salinity_tolerance)]
 noST <- which(noST == "TRUE")
@@ -534,51 +563,22 @@ rm(noST)
 # Collect unique species.
 dfAddSpecies <- dfEnvironSalLevel[, 1]
 # Merge back to master species list.
-dfMasterSpecies <- merge(dfMasterSpecies, dfAddSpecies, by = "species_name", all.x = TRUE)
+dfMasterSpecies <- rbind(dfMasterSpecies, dfAddSpecies)
+# Keep only unique species.
+dfMasterSpecies <- dfMasterSpecies[!duplicated(dfMasterSpecies$species_name), ]
 
-### RECODING dfEcosystemTraits ###
-
-# SHOULD MOVE THIS PRIOR TO CREATING INDIVIDUAL TRAIT DFS.
-# Make sure all of the traits are of the factor class.
-# Assign column numbers I want to change into a vector.
-changeVars <- c(2:3, 5:8)
-# Update only these columns in the datatable to factor type.
-dfEcosystemTraits[, (changeVars) := lapply(.SD, as.factor), .SDcols = changeVars]
-
-# TRAITs: introduced & endemic.
-# These two-level (binary) factor type traits. Recoding them in the same way.
-changeVars <- c("introduced", "endemic")
-# Use the revalue function to recode these two columns. Double check that this works!
-dfEcosystemTraits[, (changeVars) := lapply(.SD, function(x) revalue(x, c("No" = "0", "Yes" = "1"))), 
-                  .SDcols = changeVars]
-# TRAIT: salinity_tolerance.
-# Two-level factor type trait.
-dfEcosystemTraits[, salinity_tolerance := revalue(salinity_tolerance, 
-                                                  c("stenohaline" = "0",
-                                                    "euryhaline" = "1"))]
-# TRAIT: env_salinity_level.
-# Three-level factor type trait.
-dfEcosystemTraits[, env_salinity_level := revalue(env_salinity_level, 
-                                                  c("freshwater" = "1", 
-                                                    "brackish" = "2", 
-                                                    "saltwater" = "3"))]
-# TRAIT: ecosystem_type.
-# Five-level factor type trait.
-# EDIT: Need error/flag statements when a value isn't present
-dfEcosystemTraits[, ecosystem_type := revalue(ecosystem_type, 
-                                              c("Sea/Bay/Gulf" = "1",
-                                                "River (basin)" = "2",
-                                                "Lake" = "3",
-                                                "Lagoon" = "4",
-                                                "Zoogeographic realm" = NA))]
-# I only want one row per species for matching purposes.
+# Finally, prepare the dfEcosystemTraits datatable for the multivariate analysis
+# by taking only a single row per species.
 dfEcosystemTraits <- dfEcosystemTraits[!duplicated(dfEcosystemTraits$species_name), ] 
+dfEcosystemTraits$status <- NULL # Not sure if I am using this data yet.
+
+
 
 
 ### MORPHOMETRICS TRAITS ###
-#dfMorphometrics <- data.frame(morphometrics(speciesNames))
+dfMorphometrics <- data.frame(morphometrics(speciesNames))
 # Storing this as a file.
-#write.csv(dfMorphometrics, file = "morphometrics_information.csv") 
+write.csv(dfMorphometrics, file = "morphometrics_information.csv") 
 # Read in the ecology information.
 dfMorphometrics <- fread("morphometrics_information.csv")
 # Datatable reorganization and renaming. Renaming column names to keep variable
@@ -601,6 +601,64 @@ dfMorphometricTraits[, (medianVars) := lapply(.SD, function(x) median(x, na.rm =
                      by = species_name, .SDcols = medianVars]
 # I only want one row per species.
 dfMorphometricTraits <- dfMorphometricTraits[!duplicated(dfMorphometricTraits$species_name), ] 
+
+# TRAIT: Total length.
+# Filtering for presence of total_length data. This is for the univariate analyses section.
+noTL <- dfMorphometricTraits[, is.na(total_length)]
+noTL <- which(noTL == "TRUE")
+# Construct the dfTotalLength datatable. This datatable will be used in the eventually 
+# univariate analysis.
+if (length(noTL) > 0) {
+  # Remove the species with NA for this trait.
+  dfTotalLength <- dfMorphometricTraits[-noTL, ]
+  # Reorganize datatable.
+  dfTotalLength <- dfTotalLength[, .(species_name, total_length)]
+  # Remove duplicate entries.
+  dfTotalLength <- dfTotalLength[!duplicated(dfTotalLength$species_name), ] 
+} else {
+  # If no entries need to be removed, just rename and reorganize dfMorphometricTraits.
+  dfTotalLength <- dfMorphometricTraits[, .(species_name, total_length)]
+  # Remove duplicate entries.
+  dfTotalLength <- dfTotalLength[!duplicated(dfTotalLength$species_name), ]  
+}
+rm(noTL)
+# Collect unique species.
+dfAddSpecies <- dfTotalLength[, 1]
+# Merge back to master species list.
+dfMasterSpecies <- rbind(dfMasterSpecies, dfAddSpecies)
+# Keep only unique species.
+dfMasterSpecies <- dfMasterSpecies[!duplicated(dfMasterSpecies$species_name), ]
+
+
+# TRAIT: Standard length.
+# Filtering for presence of standard_length data. This is for the univariate analyses section.
+noSL <- dfMorphometricTraits[, is.na(standard_length)]
+noSL <- which(noSL == "TRUE")
+# Construct the dfStandardLength datatable. This datatable will be used in the eventually 
+# univariate analysis.
+if (length(noSL) > 0) {
+  # Remove the species with NA for this trait.
+  dfStandardLength <- dfMorphometricTraits[-noTL, ]
+  # LEFT OFF HERE!
+  # Reorganize datatable.
+  dfTotalLength <- dfTotalLength[, .(species_name, standard_length)]
+  # Remove duplicate entries.
+  dfTotalLength <- dfTotalLength[!duplicated(dfTotalLength$species_name), ] 
+} else {
+  # If no entries need to be removed, just rename and reorganize dfMorphometricTraits.
+  dfTotalLength <- dfMorphometricTraits[, .(species_name, standard_length)]
+  # Remove duplicate entries.
+  dfTotalLength <- dfTotalLength[!duplicated(dfTotalLength$species_name), ]  
+}
+rm(noTL)
+# Collect unique species.
+dfAddSpecies <- dfTotalLength[, 1]
+# Merge back to master species list.
+dfMasterSpecies <- rbind(dfMasterSpecies, dfAddSpecies)
+# Keep only unique species.
+dfMasterSpecies <- dfMasterSpecies[!duplicated(dfMasterSpecies$species_name), ]
+
+
 
 
 ### MORPHOLOGY TRAITS ###

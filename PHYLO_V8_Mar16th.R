@@ -101,7 +101,7 @@ update.packages()
 # Download sequences from BOLD using the function bold_seqspec() for sequence
 # and specimen data. In addition, I am only selecting those columns needed for
 # downstream analysis.
-dfInitial <- bold_seqspec(taxon = "Salmoniformes", 
+dfInitial <- bold_seqspec(taxon = "Actinopterygii", 
                           geo = "all")[, c("recordID", "bin_uri", "order_name", 
                                            "species_name", "lat", "nucleotides", 
                                            "markercode")] 
@@ -346,9 +346,9 @@ rm(dfBoldBase)
 
 ### ECOSYSTEM TRAITS ###
 # The entries in this datatable are from different references/sources.
-dfEcosystem <- data.frame(ecosystem(speciesNames))
+#dfEcosystem <- data.frame(ecosystem(speciesNames))
 # Storing this as a file.
-write.csv(dfEcosystem, file = "ecosystem_information.csv")
+#write.csv(dfEcosystem, file = "ecosystem_information.csv")
 # Read in the ecosystem information.
 dfEcosystem <- fread("ecosystem_information.csv")
 # Datatable reorganization and renaming. Renaming column names to keep variable
@@ -356,7 +356,11 @@ dfEcosystem <- fread("ecosystem_information.csv")
 dfEcosystemTraits <- dfEcosystem[, .(species_name = sciname, status = Status, 
                                      ecosystem_type = EcosystemType, 
                                      salinity = Salinity, 
-                                     average_depth = AverageDepth)]
+                                     average_depth = AverageDepth,
+                                     max_depth = MaxDepth,
+                                     temp_surface = TempSurface,
+                                     temp_depth = TempDepth,
+                                     climate = Climate)]
 
 # Mode trait(s).
 # TRAIT: Ecosystem Type.
@@ -375,6 +379,7 @@ dfEcosystemTraits[, ecosystem_type := revalue(ecosystem_type,
                                                 "River (basin)" = "2",
                                                 "Lake" = "3",
                                                 "Lagoon" = "4",
+                                                "Seamount" = "5",
                                                 "Zoogeographic realm" = NA))]
 
 # Univariate section.
@@ -408,8 +413,18 @@ GetTraitSpecificData <- function(x, y) {
   return(z)
 }
 # # Filtering for presence of ecosystem_type data. This is for the univariate analyses section.
-# Create a species list for eventual master phylogeny.
+# First, does the trait pass the tests for inclusion in analyses?
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes!
 dfEcosystemType <- setDT(GetTraitSpecificData(dfEcosystemTraits, 3))
+# TEST 2: Does the trait have enough data variation?
+# Answer: Lagoon and Seamount categories too rare so they will be removed.
+table(dfEcosystemType$ecosystem_type)
+rareVars <- which(dfEcosystemType$ecosystem_type == 4 | dfEcosystemType$ecosystem_type == 5)
+dfEcosystemType <- dfEcosystemType[-rareVars, ]
+# Also dropping these levels from the factor.
+dfEcosystemType$ecosystem_type <- droplevels(dfEcosystemType$ecosystem_type)
+# Create a master species list for eventually master phylogeny.
 dfMasterSpecies <- dfEcosystemType[, 1]
 
 
@@ -423,12 +438,21 @@ dfEcosystemTraits[, env_salinity_level := as.factor(env_salinity_level)]
 # Three-level factor type trait.
 # EDIT: Need error/flag statements when a value isn't present
 dfEcosystemTraits[, env_salinity_level := revalue(env_salinity_level, 
-                                                  c("freshwater" = "1", 
-                                                    "brackish" = "2", 
-                                                    "saltwater" = "3"))]
+                                                  c("freshwater" = "0", 
+                                                    "saltwater" = "1"))]
 # Filtering for presence of env_salinity_level data. This is for the univariate analyses section.
-dfEnvironSalLevel <- setDT(GetTraitSpecificData(dfEcosystemTraits, 6))
-
+# Does the trait pass the tests for inclusion in analyses?
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes!
+dfEnvironSalLevel <- setDT(GetTraitSpecificData(dfEcosystemTraits, 10))
+# TEST 2: Does the trait have enough data variation?
+# Answer: Brackish water was rare and was removed.
+table(dfEnvironSalLevel$env_salinity_level)
+rareVars <- which(dfEnvironSalLevel$env_salinity_level == "brackish")
+dfEnvironSalLevel <- dfEnvironSalLevel[-rareVars, ]
+# Also dropping this levels from the factor.
+dfEnvironSalLevel$env_salinity_level <- droplevels(dfEnvironSalLevel$env_salinity_level)
+# Also remove the "brackish" level.
 # I will be adding unique species to the master phylogeny a lot.
 AppendToMasterSpeciesDf <- function(trait_data, df_to_append_to) {
   # Collect unique species.
@@ -444,17 +468,95 @@ AppendToMasterSpeciesDf <- function(trait_data, df_to_append_to) {
 dfMasterSpecies <- AppendToMasterSpeciesDf(dfEnvironSalLevel, dfMasterSpecies)
 
 
+# TRAIT: Climate.
+# First, revalue the category names so the syntax is consistent (i.e. "Polar" should be "polar").
+dfEcosystemTraits[, climate := revalue(climate, c("Boreal" = "boreal", "Polar" = "polar",
+                                                  "Subtropical" = "subtropical", 
+                                                  "Temperate" = "temperate",
+                                                  "Tropical" = "tropical"))]
+dfEcosystemTraits[, count := .N, by = .(species_name, climate)]
+dfEcosystemTraits[order(-count), climate := climate[1L], by = species_name]
+dfEcosystemTraits$count <- NULL
+# Recode env_salinity_level for regression analyses.
+# Change the data to factor type.
+dfEcosystemTraits[, climate := as.factor(climate)]
+# Filtering for presence of climate data. This is for the univariate analyses section.
+# Does the trait pass the tests for inclusion in analyses?
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: 
+dfClimate <- setDT(GetTraitSpecificData(dfEcosystemTraits, 9))
+# TEST 2: Does the trait have enough data variation?
+# Answer: Boreal is too rare and is removed.
+table(dfClimate$climate)
+rareVars <- which(dfClimate$climate == "boreal")
+dfClimate <- dfClimate[-rareVars, ]
+#Also dropping this levels from the factor.
+dfClimate$climate <- droplevels(dfClimate$climate)
+# Collect any new species from dfClimate.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfClimate, dfMasterSpecies)
+
+
 
 # Median trait(s).
 # TRAIT: Average depth.
+# Note: These values don't seem to match up with those found on fish base.
 # The column average_depth must first be converted to double (numeric) type.
 dfEcosystemTraits[, average_depth := as.double(average_depth)]
 # The median average_depth is then determined for each species.
 dfEcosystemTraits[, average_depth := median(average_depth, na.rm = TRUE), keyby = species_name]
 # Filtering for presence of average depth data. This is for the univariate analyses section.
+# 500 SPECIES TEST: PASS 
 dfAvgDepth <- setDT(GetTraitSpecificData(dfEcosystemTraits, 5))
+# TEST 2: Does the trait have enough data variation?
+# Answer: Continuous trait. Limited variation but this can be noted in discussion.
+hist(dfAvgDepth$average_depth)
 # Collect any new species from dfAvgDepth.
 dfMasterSpecies <- AppendToMasterSpeciesDf(dfAvgDepth, dfMasterSpecies)
+
+
+# TRAIT: Maximum depth.
+# The column max_depth must first be converted to double (numeric) type.
+dfEcosystemTraits[, max_depth := as.double(max_depth)]
+# The median max_depth is then determined for each species.
+dfEcosystemTraits[, max_depth := median(max_depth, na.rm = TRUE), keyby = species_name]
+# Filtering for presence of max depth data. This is for the univariate analyses section.
+# 500 SPECIES TEST: PASS 
+dfMaxDepth <- setDT(GetTraitSpecificData(dfEcosystemTraits, 6))
+# TEST 2: Does the trait have enough data variation?
+# Answer: Continuous trait. Limited variation but this can be noted in discussion.
+hist(dfMaxDepth$max_depth)
+# Collect any new species from dfMaxDepth.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfMaxDepth, dfMasterSpecies)
+
+
+# TRAIT: Surface temperature.
+# The column temp_surface must first be converted to double (numeric) type.
+dfEcosystemTraits[, temp_surface := as.double(temp_surface)]
+# The median temp_surface is then determined for each species.
+dfEcosystemTraits[, temp_surface := median(temp_surface, na.rm = TRUE), keyby = species_name]
+# Filtering for presence of max depth data. This is for the univariate analyses section.
+# 500 SPECIES TEST: PASS 
+dfTempSurface <- setDT(GetTraitSpecificData(dfEcosystemTraits, 7))
+# TEST 2: Does the trait have enough data variation?
+# Answer: Continuous trait. Limited variation but this can be noted in discussion.
+hist(dfTempSurface$temp_surface)
+# Collect any new species from dfTempSurface.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfTempSurface, dfMasterSpecies)
+
+# TRAIT: Depth temperature.
+# The column temp_depth must first be converted to double (numeric) type.
+dfEcosystemTraits[, temp_depth := as.double(temp_depth)]
+# The median temp_depth is then determined for each species.
+dfEcosystemTraits[, temp_depth := median(temp_depth, na.rm = TRUE), keyby = species_name]
+# Filtering for presence of max depth data. This is for the univariate analyses section.
+# 500 SPECIES TEST: PASS 
+dfTempDepth <- setDT(GetTraitSpecificData(dfEcosystemTraits, 8))
+# TEST 2: Does the trait have enough data variation?
+# Answer: Continuous trait. Limited variation but this can be noted in discussion.
+hist(dfTempDepth$temp_depth)
+# Collect any new species from dfTempDepth.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfTempDepth, dfMasterSpecies)
+
 
 
 # Special cases.
@@ -469,7 +571,7 @@ dfMasterSpecies <- AppendToMasterSpeciesDf(dfAvgDepth, dfMasterSpecies)
    # answer <- "Yes" 
   #} else {
     # Else, it will be assigned "No".
-    #answer <- "No"
+   # answer <- "No"
   #} 
   #return(answer)
 #}
@@ -478,22 +580,33 @@ dfMasterSpecies <- AppendToMasterSpeciesDf(dfAvgDepth, dfMasterSpecies)
 #dfEcosystemTraits[, introduced := DetermineIfSpeciesIntroduced(status), by = species_name]
 
 # ENDEMICITY.
-#DetermineIfSpeciesEndemic <- function(x) {
- # answer <- NULL
-  #containsEndemic <- length(grep("endemic", x))
+DetermineIfSpeciesEndemic <- function(x) {
+  answer <- NULL
+  containsEndemic <- length(grep("endemic", x))
   # If the species has ever been introduced in an area..
-  #if (containsEndemic > 0) {
+  if (containsEndemic > 0) {
     # It will be assigned "Yes".
-   # answer <- "Yes" 
-  #} else {
+    answer <- "Yes" 
+  } else {
     # Else, it will be assigned "No".
-   # answer <- "No"
-  #} 
-  #return(answer)
-#}
+    answer <- "No"
+  } 
+  return(answer)
+}
 
 # Apply the DetermineIfSpeciesEndemic function to the appropriate column in the datatable.
-#dfEcosystemTraits[, endemic := DetermineIfSpeciesEndemic(status), by = species_name]
+dfEcosystemTraits[, endemic := DetermineIfSpeciesEndemic(status), by = species_name]
+# Filtering for presence of endemicity data. This is for the univariate analyses section.
+# 500 SPECIES TEST: PASS 
+dfEndemic <- setDT(GetTraitSpecificData(dfEcosystemTraits, 11))
+# TEST 2: Does the trait have enough data variation?
+# Answer: PASS.
+table(dfEndemic$endemic)
+# Collect any new species from dfTempDepth.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfEndemic, dfMasterSpecies)
+# Don't need this column anymore.
+dfEcosystemTraits$status <- NULL
+
 
 # SALINITY TOLERANCE
 DetermineSalinityTolerance <- function(x) {
@@ -526,14 +639,17 @@ dfEcosystemTraits[, salinity_tolerance := revalue(salinity_tolerance,
                                                   c("stenohaline" = "0", 
                                                     "euryhaline" = "1"))]
 # Filtering for presence of salinity tolerance data. This is for the univariate analyses section.
-dfEnvironSalLevel <- setDT(GetTraitSpecificData(dfEcosystemTraits, 6))
+# 500 SPECIES TEST: PASS 
+dfSalTolerance <- setDT(GetTraitSpecificData(dfEcosystemTraits, 10))
+# TEST 2: Does the trait have enough data variation?
+# Answer: PASS.
+table(dfSalTolerance$salinity_tolerance)
 # Collect any new species from dfEnvironSalLevel.
 dfMasterSpecies <- AppendToMasterSpeciesDf(dfEnvironSalLevel, dfMasterSpecies)
 
 # Finally, prepare the dfEcosystemTraits datatable for the multivariate analysis
 # by taking only a single row per species.
 dfEcosystemTraits <- dfEcosystemTraits[!duplicated(dfEcosystemTraits$species_name), ] 
-dfEcosystemTraits$status <- NULL # Not sure if I am using this data yet.
 
 
 
@@ -604,9 +720,9 @@ dfMasterSpecies <- AppendToMasterSpeciesDf(dfAspectRatio, dfMasterSpecies)
 
 
 ### MORPHOLOGY TRAITS ###
-#dfMorphology <- data.frame(morphology(speciesNames))
+dfMorphology <- data.frame(morphology(speciesNames))
 # Storing this as a file.
-#write.csv(dfMorphology, file = "morphology_information.csv") 
+write.csv(dfMorphology, file = "morphology_information.csv") 
 # Read in the ecology information.
 dfMorphology <- fread("morphology_information.csv")
 # Get rid of columns I do not need for the regression analysis.
@@ -624,18 +740,49 @@ dfMorphologyTraits[, (changeVars) := lapply(.SD, as.factor), .SDcols = changeVar
 # Also, recode operculum_present.
 dfMorphologyTraits[, operculum_present := revalue(operculum_present, c("-1" = "1"))]
 
+# TRAIT: Body Shape I.
+# Filtering for presence of body shape I data. This is for the univariate analyses section.
+dfBodyShapeI <- setDT(GetTraitSpecificData(dfMorphologyTraits, 2))
+# Collect any new species from dfBodyShapeI.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfBodyShapeI, dfMasterSpecies)
+
+# TRAIT: Body Shape II.
+# Filtering for presence of body shape II data. This is for the univariate analyses section.
+dfBodyShapeII <- setDT(GetTraitSpecificData(dfMorphologyTraits, 3))
+# Collect any new species from dfBodyShapeII.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfBodyShapeII, dfMasterSpecies)
+
+# TRAIT: Operculum Present.
+# Filtering for presence of operculum present data. This is for the univariate analyses section.
+dfOperPresent <- setDT(GetTraitSpecificData(dfMorphologyTraits, 4))
+# Collect any new species from dfOperPresent.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfOperPresent, dfMasterSpecies)
+
+# TRAIT: Position of Mouth.
+# Filtering for presence of position of mouth data. This is for the univariate analyses section.
+dfPosMouth <- setDT(GetTraitSpecificData(dfMorphologyTraits, 5))
+# Collect any new species from dfPosMouth.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfPosMouth, dfMasterSpecies)
+
+# TRAIT: Type of Scales.
+# Filtering for presence of type of scales data. This is for the univariate analyses section.
+dfScaleType <- setDT(GetTraitSpecificData(dfMorphologyTraits, 6))
+# Collect any new species from dfScaleType.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfScaleType, dfMasterSpecies)
+
+
 
 ### ECOLOGY TRAITS ###
-#dfEcology <- data.frame(ecology(speciesNames))
+dfEcology <- data.frame(ecology(speciesNames))
 # Storing this as a file.
-#write.csv(dfEcology, file = "ecology_information.csv") 
+write.csv(dfEcology, file = "ecology_information.csv") 
 # Read in the ecology information.
 dfEcology <- fread("ecology_information.csv")
 colnames(dfEcology)[3] <- "species_name"
 # Get rid of columns I do not need for the regression analysis. 
 # Note: There is only one row per species in dfEcology.
-dfEcologyTraits <- dfEcology[, c(3, 7:29, 31, 33:36, 39:40, 45:57, 61, 63, 66:88,
-                                 90:111, 113, 115:123)]
+dfEcologyTraits <- dfEcology[, c(3, 7:27, 29, 31, 33, 39, 52:57, 66:78,
+                                 80:88, 90:110, 117:118, 121)]
 # Recode ecology traits to the types needed for regression analysis.
 # Which columns are integers?
 integerVars <- dfEcologyTraits[, lapply(.SD, is.integer)]
@@ -655,6 +802,47 @@ rm(integerVars)
 rm(characterVars)
 rm(changeVars)
 
+# Removal of near zero variance traits. These traits are not informative enough for
+# regression analyses.
+dfEcologyTraits <- as.data.frame(dfEcologyTraits)
+dfEcologyTraits <- dfEcologyTraits[, -nearZeroVar(dfEcologyTraits)]
+
+# TRAIT: Stream.
+# Filtering for presence of type of stream data. This is for the univariate analyses section.
+dfStream <- setDT(GetTraitSpecificData(dfEcologyTraits, 2))
+# Collect any new species from dfScaleType.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfScaleType, dfMasterSpecies)
+
+# TRAIT: Lakes.
+# Filtering for presence of type of lake data. This is for the univariate analyses section.
+dfLake <- setDT(GetTraitSpecificData(dfEcologyTraits, 3))
+# Collect any new species from dfLake.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfLake, dfMasterSpecies)
+
+# TRAIT: Herbivory.
+# Filtering for presence of type of herbivory data. This is for the univariate analyses section.
+dfHerbivory <- setDT(GetTraitSpecificData(dfEcologyTraits, 4))
+# Collect any new species from dfHerbivory.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfHerbivory, dfMasterSpecies)
+
+# TRAIT: Feeding Type.
+# Filtering for presence of type of feeding type data. This is for the univariate analyses section.
+dfFeedingType <- setDT(GetTraitSpecificData(dfEcologyTraits, 5))
+# Collect any new species from dfFeedingType.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfFeedingType, dfMasterSpecies)
+
+# TRAIT: Diet Troph.
+# Filtering for presence of type of diet troph data. This is for the univariate analyses section.
+dfDietTroph <- setDT(GetTraitSpecificData(dfEcologyTraits, 6))
+# Collect any new species from dfDietTroph.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfDietTroph, dfMasterSpecies)
+
+# TRAIT: Food Troph.
+# Filtering for presence of type of diet troph data. This is for the univariate analyses section.
+dfFoodTroph <- setDT(GetTraitSpecificData(dfEcologyTraits, 7))
+# Collect any new species from dfFoodTroph.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfFoodTroph, dfMasterSpecies)
+
 
 # POTENTIAL NEW TRAITS.
 
@@ -666,113 +854,110 @@ write.csv(dfIntroductions, file = "introductions_information.csv")
 dfIntroductions <- fread("introductions_information.csv")
 colnames(dfIntroductions)[5] <- "species_name"
 
+# Reason, Estabwild, EstabType, EstabAqua, ReproMode, EcolEff, EcolEffType, Impacts, Invasive
+
+
+
 
 ### DIET RELATED ###
 # Diet data.
-#dfDiet <- data.frame(diet(speciesNames))
-#write.csv(dfDiet, file = "diet_information.csv") 
+dfDiet <- data.frame(diet(speciesNames))
+write.csv(dfDiet, file = "diet_information.csv") 
 # Read in the diet information.
 dfDiet <- fread("diet_information.csv")
 colnames(dfDiet)[4] <- "species_name"
 
-# Food items.
-#dfFoodItems <- data.frame(fooditems(speciesNames))
-#write.csv(dfFoodItems, file = "fooditem_information.csv") 
-# Read in the food item information.
-dfFoodItems <- fread("fooditem_information.csv")
-colnames(dfFoodItems)[4] <- "species_name"
-
-
-### DISTRIBUTION RELATED ###
-# FAO area.
-#dfFAOArea <- data.frame(faoareas(speciesNames))
-#write.csv(dfFoodItems, file = "fooditem_information.csv") 
-# Read in the diet information.
-dfFoodItems <- fread("fooditem_information.csv")
-colnames(dfFoodItems)[4] <- "species_name"
+# Troph, FoodI
 
 
 ### LIFE HISTORY RELATED ###
 # Fecundity.
-#dfFecundity <- data.frame(fecundity(speciesNames))
-#write.csv(dfFecundity, file = "fecundity_information.csv") 
+dfFecundity <- data.frame(fecundity(speciesNames))
+write.csv(dfFecundity, file = "fecundity_information.csv") 
 # Read in the fecundity information.
 dfFecundity <- fread("fecundity_information.csv")
 colnames(dfFecundity)[4] <- "species_name"
 
+# FecundityMin, WeightMin, LengthFecunMin, FecundityMax, WeightMax, LengthFecunMax, LengthTypeFecMac, SpawningCycles
+
+
 # Maturity.
-#dfMaturity <- data.frame(maturity(speciesNames))
-#write.csv(dfMaturity, file = "maturity_information.csv") 
+dfMaturity <- data.frame(maturity(speciesNames))
+write.csv(dfMaturity, file = "maturity_information.csv") 
 # Read in the maturity information.
 dfMaturity <- fread("maturity_information.csv")
 colnames(dfMaturity)[3] <- "species_name"
 
+# Sex, AgeMatMin (lower range), AgeMatMin2 (upper range), tm (age at maturity)
+
+
+
 # Reproduction.
-#dfReproduction <- data.frame(reproduction(speciesNames))
-#write.csv(dfReproduction, file = "reproduction_information.csv") 
+dfReproduction <- data.frame(reproduction(speciesNames))
+write.csv(dfReproduction, file = "reproduction_information.csv") 
 # Read in the reproduction information.
 dfReproduction <- fread("reproduction_information.csv")
 colnames(dfReproduction)[4] <- "species_name"
 
+# ReproMode, Fertilization, MatingSystem, Spawning, BatchSpawner, RepGuild1, RepGuild2,
+# ParentalCare, ParentalCareQ
+
+
 # Spawning.
-#dfSpawning <- data.frame(spawning(speciesNames))
-#write.csv(dfSpawning, file = "spawning_information.csv") 
+dfSpawning <- data.frame(spawning(speciesNames))
+write.csv(dfSpawning, file = "spawning_information.csv") 
 # Read in the spawning information.
 dfSpawning <- fread("spawning_information.csv")
 colnames(dfSpawning)[3] <- "species_name"
 
+# SpawningGround, TempLow, TempHigh, WeightMin, WeightMax
+
+
+
 
 ### MORPHOMETRIC RELATED ###
-# Length_weight.
-#dfLengthWeight <- data.frame(length_weight(speciesNames))
-#write.csv(dfLengthWeight, file = "length_weight_information.csv") 
-# Read in the length_weight information.
-dfLengthWeight <- fread("length_weight_information.csv")
-colnames(dfLengthWeight)[4] <- "species_name"
-
 # Popchar.
-#dfPopChar <- data.frame(popchar(speciesNames))
-#write.csv(dfPopChar, file = "popchar_information.csv") 
+dfPopChar <- data.frame(popchar(speciesNames))
+write.csv(dfPopChar, file = "popchar_information.csv") 
 # Read in the popchar information.
 dfPopChar <- fread("popchar_information.csv")
 colnames(dfPopChar)[3] <- "species_name"
 
-# PopGrowth.
-#dfPopGrowth <- data.frame(popgrowth(speciesNames))
-#write.csv(dfPopGrowth, file = "popgrowth_information.csv") 
-# Read in the popgrowth information.
-dfPopGrowth <- fread("popgrowth_information.csv")
-colnames(dfPopGrowth)[4] <- "species_name"
-
-# PopQb.
-#dfPopQB <- data.frame(popqb(speciesNames))
-#write.csv(dfPopQB, file = "popqb_information.csv") 
-# Read in the popqb information.
-dfPopQB <- fread("popqb_information.csv")
-colnames(dfPopQB)[3] <- "species_name"
+# Wmax, TypeWeight, Lmax, Type, tmax, 
 
 
 ### PHYSIOLOGY RELATED ###
 # Oxygen.
-#dfOxygen <- data.frame(oxygen(speciesNames))
-#write.csv(dfOxygen, file = "oxygen_information.csv") 
+dfOxygen <- data.frame(oxygen(speciesNames))
+write.csv(dfOxygen, file = "oxygen_information.csv") 
 # Read in the oxygen information.
 dfOxygen <- fread("oxygen_information.csv")
 colnames(dfOxygen)[4] <- "species_name"
 
+# Weight, Temp, Oxygen, Oxygenmgl, OxygenCons, MetabolicLevel
+
+
 # Speed.
-#dfSpeed <- data.frame(speed(speciesNames))
-#write.csv(dfSpeed, file = "speed_information.csv") 
+dfSpeed <- data.frame(speed(speciesNames))
+write.csv(dfSpeed, file = "speed_information.csv") 
 # Read in the speed information.
 dfSpeed <- fread("speed_information.csv")
 colnames(dfSpeed)[4] <- "species_name"
 
+# Speedms, Mode
+
+
 # Swimming.
-#dfSwimming <- data.frame(swimming(speciesNames))
-#write.csv(dfSwimming, file = "swimming_information.csv") 
+dfSwimming <- data.frame(swimming(speciesNames))
+write.csv(dfSwimming, file = "swimming_information.csv") 
 # Read in the swimming information.
 dfSwimming <- fread("swimming_information.csv")
 colnames(dfSwimming)[2] <- "species_name"
+
+# AdultType, AdultMode
+
+
+
 
 
 # Construction of dfTraits datatable.

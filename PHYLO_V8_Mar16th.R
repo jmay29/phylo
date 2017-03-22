@@ -842,9 +842,9 @@ dfMasterSpecies <- AppendToMasterSpeciesDf(dfScaleType, dfMasterSpecies)
 
 
 ### ECOLOGY TRAITS ###
-dfEcology <- data.frame(ecology(speciesNames))
+#dfEcology <- data.frame(ecology(speciesNames))
 # Storing this as a file.
-write.csv(dfEcology, file = "ecology_information.csv") 
+#write.csv(dfEcology, file = "ecology_information.csv") 
 # Read in the ecology information.
 dfEcology <- fread("ecology_information.csv")
 colnames(dfEcology)[3] <- "species_name"
@@ -871,44 +871,261 @@ rm(integerVars)
 rm(characterVars)
 rm(changeVars)
 
-# Removal of near zero variance traits. These traits are not informative enough for
-# regression analyses.
+# There are a lot of traits here so I am going to use nearZeroVar to cut a lot of them at once.
+# AKA Cutting traits that have little variation (rarer categories less than 1%).
+# The remaining traits automically pass the variation test but I will still be looking
+# closely at non-binary traits.
 dfEcologyTraits <- as.data.frame(dfEcologyTraits)
-dfEcologyTraits <- dfEcologyTraits[, -nearZeroVar(dfEcologyTraits)]
+dfEcologyTraits <- dfEcologyTraits[, -nearZeroVar(dfEcologyTraits, freqCut = 99/1)]
+
+# Categorical traits.
+# Binary traits.
+# TRAIT: Neritic.
+# Filtering for trait data.
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes!
+dfNeritic <- setDT(GetTraitSpecificData(dfEcologyTraits, 2))
+# TEST 2: Does the trait have enough data variation?
+# Answer: Yes!
+table(dfNeritic$Neritic)
+# Collect any new species.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfNeritic, dfMasterSpecies)
+
+# TRAIT: Intertidal.
+# Filtering for trait data.
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes!
+dfIntertidal <- setDT(GetTraitSpecificData(dfEcologyTraits, 3))
+# Collect any new species.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfIntertidal, dfMasterSpecies)
+
+# TRAIT: Oceanic.
+# Filtering for trait data.
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes!
+dfOceanic <- setDT(GetTraitSpecificData(dfEcologyTraits, 4))
+# Collect any new species.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfOceanic, dfMasterSpecies)
+
+# TRAIT: Epipegalic.
+# Filtering for trait data.
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes!
+dfEpipegalic <- setDT(GetTraitSpecificData(dfEcologyTraits, 5))
+# Collect any new species.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfEpipegalic, dfMasterSpecies)
+
+# TRAIT: Mesopelagic.
+# Filtering for trait data.
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes!
+dfMesopelagic <- setDT(GetTraitSpecificData(dfEcologyTraits, 6))
+# Collect any new species.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfMesopelagic, dfMasterSpecies)
+
+# TRAIT: Bathypelagic.
+# Filtering for trait data.
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes!
+dfBathypelagic <- setDT(GetTraitSpecificData(dfEcologyTraits, 7))
+# Collect any new species.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfBathypelagic, dfMasterSpecies)
+
+# TRAIT: Estuaries.
+# Filtering for trait data.
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes!
+dfEstuaries <- setDT(GetTraitSpecificData(dfEcologyTraits, 8))
+# Collect any new species.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfEstuaries, dfMasterSpecies)
+
+# TRAIT: Mangroves.
+# Filtering for trait data.
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes!
+dfMangroves <- setDT(GetTraitSpecificData(dfEcologyTraits, 9))
+# Collect any new species.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfMangroves, dfMasterSpecies)
 
 # TRAIT: Stream.
 # Filtering for presence of type of stream data. This is for the univariate analyses section.
-dfStream <- setDT(GetTraitSpecificData(dfEcologyTraits, 2))
-# Collect any new species from dfScaleType.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfScaleType, dfMasterSpecies)
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes!
+dfStreams <- setDT(GetTraitSpecificData(dfEcologyTraits, 10))
+# Collect any new species from dfStream.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfStreams, dfMasterSpecies)
 
 # TRAIT: Lakes.
 # Filtering for presence of type of lake data. This is for the univariate analyses section.
-dfLake <- setDT(GetTraitSpecificData(dfEcologyTraits, 3))
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes!
+dfLakes <- setDT(GetTraitSpecificData(dfEcologyTraits, 11))
 # Collect any new species from dfLake.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfLake, dfMasterSpecies)
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfLakes, dfMasterSpecies)
 
-# TRAIT: Herbivory.
+# TRAIT: Schooling.
+# Filtering for presence of trait data. 
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes!
+dfSchooling <- setDT(GetTraitSpecificData(dfEcologyTraits, 16))
+# Collect any new species.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfHerbivory, dfMasterSpecies)
+
+# TRAIT: SchoolingFrequency.
+# Filtering for presence of trait data.
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: No!
+dfSchoolingFrequency <- setDT(GetTraitSpecificData(dfEcologyTraits, 17))
+# Remove this trait.
+dfEcologyTraits$SchoolingFrequency <- NULL
+# Same case for these traits...
+dfEcologyTraits$SchoolingLifestage <- NULL
+dfEcologyTraits$ShoalingFrequency <- NULL
+dfEcologyTraits$ShoalingLifestage <- NULL
+
+# TRAIT: Benthic.
+# Filtering for presence of trait data. 
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes!
+dfBenthic <- setDT(GetTraitSpecificData(dfEcologyTraits, 17))
+# Collect any new species.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfBenthic, dfMasterSpecies)
+
+# TRAIT: SoftBottom.
+# Filtering for presence of trait data. 
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes!
+dfSoftBottom <- setDT(GetTraitSpecificData(dfEcologyTraits, 18))
+# Collect any new species.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfSoftBottom, dfMasterSpecies)
+
+# TRAIT: Sand.
+# Filtering for presence of trait data. 
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes!
+dfSand <- setDT(GetTraitSpecificData(dfEcologyTraits, 19))
+# Collect any new species.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfSand, dfMasterSpecies)
+
+# TRAIT: Silt.
+# Filtering for presence of trait data. 
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes!
+dfSilt <- setDT(GetTraitSpecificData(dfEcologyTraits, 20))
+# Collect any new species.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfSilt, dfMasterSpecies)
+
+# TRAIT: Mud.
+# Filtering for presence of trait data. 
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes!
+dfMud <- setDT(GetTraitSpecificData(dfEcologyTraits, 21))
+# Collect any new species.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfMud, dfMasterSpecies)
+
+# TRAIT: HardBottom.
+# Filtering for presence of trait data. 
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes!
+dfHardBottom <- setDT(GetTraitSpecificData(dfEcologyTraits, 22))
+# Collect any new species.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfHardBottom, dfMasterSpecies)
+
+# TRAIT: Rocky.
+# Filtering for presence of trait data. 
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes!
+dfRocky <- setDT(GetTraitSpecificData(dfEcologyTraits, 23))
+# Collect any new species.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfRocky, dfMasterSpecies)
+
+# TRAIT: Rubble.
+# Filtering for presence of trait data. 
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes!
+dfRubble <- setDT(GetTraitSpecificData(dfEcologyTraits, 24))
+# Collect any new species.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfRubble, dfMasterSpecies)
+
+# TRAIT: Macrophyte.
+# Filtering for presence of trait data. 
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes!
+dfMacrophyte <- setDT(GetTraitSpecificData(dfEcologyTraits, 25))
+# Collect any new species.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfMacrophyte, dfMasterSpecies)
+
+# TRAIT: SeaGrassBeds.
+# Filtering for presence of trait data. 
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes!
+dfSeaGrassBeds <- setDT(GetTraitSpecificData(dfEcologyTraits, 26))
+# Collect any new species.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfSeaGrassBeds, dfMasterSpecies)
+
+# TRAIT: CoralReefs.
+# Filtering for presence of trait data. 
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes!
+dfCoralReefs <- setDT(GetTraitSpecificData(dfEcologyTraits, 27))
+# Collect any new species.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfCoralReefs, dfMasterSpecies)
+
+# Non-binary traits.
+# TRAIT: Herbivory2.
 # Filtering for presence of type of herbivory data. This is for the univariate analyses section.
-dfHerbivory <- setDT(GetTraitSpecificData(dfEcologyTraits, 4))
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes!
+dfHerbivory <- setDT(GetTraitSpecificData(dfEcologyTraits, 12))
+# TEST 2: Does the trait have enough data variation?
+# Answer: Yes!
+table(dfHerbivory$Herbivory2)
 # Collect any new species from dfHerbivory.
 dfMasterSpecies <- AppendToMasterSpeciesDf(dfHerbivory, dfMasterSpecies)
 
 # TRAIT: Feeding Type.
 # Filtering for presence of type of feeding type data. This is for the univariate analyses section.
-dfFeedingType <- setDT(GetTraitSpecificData(dfEcologyTraits, 5))
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes!
+dfFeedingType <- setDT(GetTraitSpecificData(dfEcologyTraits, 13))
+# TEST 2: Does the trait have enough data variation?
+# Answer: Many categories do not reach the 1% threshold and are removed.
+table(dfFeedingType$FeedingType)
+rareVars <- which(dfFeedingType$FeedingType == "feeding on a host (parasite)" |
+                  dfFeedingType$FeedingType == "feeding on dead animals (scavenger)" |
+                  dfFeedingType$FeedingType == "feeding on the prey of a host (commensal)" |
+                  dfFeedingType$FeedingType == "other" | 
+                  dfFeedingType$FeedingType == "picking parasites off a host (cleaner)" |
+                  dfFeedingType$FeedingType == "plants/detritus+animals (troph. 2.2-2.79)" |
+                  dfFeedingType$FeedingType == "sucking food-containing material")
+dfFeedingType <- dfFeedingType[-rareVars, ]
+# Also dropping these levels from the factor.
+dfFeedingType$FeedingType <- droplevels(dfFeedingType$FeedingType)
 # Collect any new species from dfFeedingType.
 dfMasterSpecies <- AppendToMasterSpeciesDf(dfFeedingType, dfMasterSpecies)
 
+
+
+
+
+# Continuous traits.
 # TRAIT: Diet Troph.
 # Filtering for presence of type of diet troph data. This is for the univariate analyses section.
-dfDietTroph <- setDT(GetTraitSpecificData(dfEcologyTraits, 6))
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes!
+dfDietTroph <- setDT(GetTraitSpecificData(dfEcologyTraits, 14))
+# TEST 2: Does the trait have enough data variation?
+hist(dfDietTroph$DietTroph)
 # Collect any new species from dfDietTroph.
 dfMasterSpecies <- AppendToMasterSpeciesDf(dfDietTroph, dfMasterSpecies)
 
 # TRAIT: Food Troph.
 # Filtering for presence of type of diet troph data. This is for the univariate analyses section.
-dfFoodTroph <- setDT(GetTraitSpecificData(dfEcologyTraits, 7))
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes!
+dfFoodTroph <- setDT(GetTraitSpecificData(dfEcologyTraits, 15))
+# TEST 2: Does the trait have enough data variation?
+hist(dfFoodTroph$FoodTroph)
 # Collect any new species from dfFoodTroph.
 dfMasterSpecies <- AppendToMasterSpeciesDf(dfFoodTroph, dfMasterSpecies)
 

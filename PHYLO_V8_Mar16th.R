@@ -750,9 +750,9 @@ dfMasterSpecies <- AppendToMasterSpeciesDf(dfAspectRatio, dfMasterSpecies)
 
 
 ### MORPHOLOGY TRAITS ###
-dfMorphology <- data.frame(morphology(speciesNames))
+#dfMorphology <- data.frame(morphology(speciesNames))
 # Storing this as a file.
-write.csv(dfMorphology, file = "morphology_information.csv") 
+#write.csv(dfMorphology, file = "morphology_information.csv") 
 # Read in the ecology information.
 dfMorphology <- fread("morphology_information.csv")
 # Get rid of columns I do not need for the regression analysis.
@@ -772,31 +772,70 @@ dfMorphologyTraits[, operculum_present := revalue(operculum_present, c("-1" = "1
 
 # TRAIT: Body Shape I.
 # Filtering for presence of body shape I data. This is for the univariate analyses section.
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes!
 dfBodyShapeI <- setDT(GetTraitSpecificData(dfMorphologyTraits, 2))
+# TEST 2: Does the trait have enough data variation?
+# Answer: "other" is too rare and will be removed.
+table(dfBodyShapeI$body_shape_I)
+rareVars <- which(dfBodyShapeI$body_shape_I == "other")
+dfBodyShapeI <- dfBodyShapeI[-rareVars, ]
+#Also dropping this levels from the factor.
+dfBodyShapeI$body_shape_I <- droplevels(dfBodyShapeI$body_shape_I)
 # Collect any new species from dfBodyShapeI.
 dfMasterSpecies <- AppendToMasterSpeciesDf(dfBodyShapeI, dfMasterSpecies)
 
 # TRAIT: Body Shape II.
 # Filtering for presence of body shape II data. This is for the univariate analyses section.
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes!
 dfBodyShapeII <- setDT(GetTraitSpecificData(dfMorphologyTraits, 3))
+# TEST 2: Does the trait have enough data variation?
+# Answer: "other" and "angular" are too rare and will be removed.
+table(dfBodyShapeII$body_shape_II)
+rareVars <- which(dfBodyShapeII$body_shape_II == "other (see Diagnosi" | dfBodyShapeII$body_shape_II == "angular")
+dfBodyShapeII <- dfBodyShapeII[-rareVars, ]
+#Also dropping this levels from the factor.
+dfBodyShapeII$body_shape_II <- droplevels(dfBodyShapeII$body_shape_II)
 # Collect any new species from dfBodyShapeII.
 dfMasterSpecies <- AppendToMasterSpeciesDf(dfBodyShapeII, dfMasterSpecies)
 
 # TRAIT: Operculum Present.
 # Filtering for presence of operculum present data. This is for the univariate analyses section.
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes!
 dfOperPresent <- setDT(GetTraitSpecificData(dfMorphologyTraits, 4))
+# TEST 2: Does the trait have enough data variation?
+# Answer: Yes!
+table(dfOperPresent$operculum_present)
 # Collect any new species from dfOperPresent.
 dfMasterSpecies <- AppendToMasterSpeciesDf(dfOperPresent, dfMasterSpecies)
 
 # TRAIT: Position of Mouth.
 # Filtering for presence of position of mouth data. This is for the univariate analyses section.
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes!
 dfPosMouth <- setDT(GetTraitSpecificData(dfMorphologyTraits, 5))
+# TEST 2: Does the trait have enough data variation?
+# Answer: Yes!
+table(dfPosMouth$pos_of_mouth)
 # Collect any new species from dfPosMouth.
 dfMasterSpecies <- AppendToMasterSpeciesDf(dfPosMouth, dfMasterSpecies)
 
 # TRAIT: Type of Scales.
+# First, revalue trait so "cycloid" is equivalent to "cycloid scales".
+dfMorphologyTraits[, type_of_scales := revalue(type_of_scales, c("cycloid" = "cycloid scales"))]
 # Filtering for presence of type of scales data. This is for the univariate analyses section.
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes!
 dfScaleType <- setDT(GetTraitSpecificData(dfMorphologyTraits, 6))
+# TEST 2: Does the trait have enough data variation?
+# Answer: "other" and "rhombic scales" are too rare and are removed.
+table(dfScaleType$type_of_scales)
+rareVars <- which(dfScaleType$type_of_scales == "other (see remark)" | dfScaleType$type_of_scales == "rhombic scales")
+dfScaleType <- dfScaleType[-rareVars, ]
+# Also dropping this levels from the factor.
+dfScaleType$type_of_scales <- droplevels(dfScaleType$type_of_scales)
 # Collect any new species from dfScaleType.
 dfMasterSpecies <- AppendToMasterSpeciesDf(dfScaleType, dfMasterSpecies)
 

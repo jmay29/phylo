@@ -654,9 +654,9 @@ dfEcosystemTraits <- dfEcosystemTraits[!duplicated(dfEcosystemTraits$species_nam
 
 
 ### MORPHOMETRICS TRAITS ###
-dfMorphometrics <- data.frame(morphometrics(speciesNames))
+#dfMorphometrics <- data.frame(morphometrics(speciesNames))
 # Storing this as a file.
-write.csv(dfMorphometrics, file = "morphometrics_information.csv") 
+#write.csv(dfMorphometrics, file = "morphometrics_information.csv") 
 # Read in the ecology information.
 dfMorphometrics <- fread("morphometrics_information.csv")
 # Datatable reorganization and renaming. Renaming column names to keep variable
@@ -681,37 +681,67 @@ dfMorphometricTraits[, (medianVars) := lapply(.SD, function(x) median(x, na.rm =
 dfMorphometricTraits <- dfMorphometricTraits[!duplicated(dfMorphometricTraits$species_name), ] 
 # TRAIT: Total length.
 # Filtering for presence of total length data. This is for the univariate analyses section.
+# Does the trait pass the tests for inclusion in analyses?
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes! 
 dfTotalLength <- setDT(GetTraitSpecificData(dfMorphometricTraits, 2))
+# TEST 2: Does the trait have enough data variation?
+hist(dfTotalLength$total_length)
 # Collect any new species from dfTotalLength.
 dfMasterSpecies <- AppendToMasterSpeciesDf(dfTotalLength, dfMasterSpecies)
 
 # TRAIT: Standard length.
 # Filtering for presence of standard length data. This is for the univariate analyses section.
+# Does the trait pass the tests for inclusion in analyses?
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes! 
 dfStandardLength <- setDT(GetTraitSpecificData(dfMorphometricTraits, 3))
+# TEST 2: Does the trait have enough data variation?
+hist(dfStandardLength$standard_length)
 # Collect any new species from dfStandardLength.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfTotalLength, dfMasterSpecies)
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfStandardLength, dfMasterSpecies)
 
 # TRAIT: Fork length.
 # Filtering for presence of fork length data. This is for the univariate analyses section.
+# Does the trait pass the tests for inclusion in analyses?
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes! 
 dfForkLength <- setDT(GetTraitSpecificData(dfMorphometricTraits, 4))
+# TEST 2: Does the trait have enough data variation?
+hist(dfForkLength$fork_length)
 # Collect any new species from dfForkLength.
 dfMasterSpecies <- AppendToMasterSpeciesDf(dfForkLength, dfMasterSpecies)
 
 # TRAIT: Head length.
 # Filtering for presence of head length data. This is for the univariate analyses section.
+# Does the trait pass the tests for inclusion in analyses?
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes! 
 dfHeadLength <- setDT(GetTraitSpecificData(dfMorphometricTraits, 5))
+# TEST 2: Does the trait have enough data variation?
+hist(dfHeadLength$head_length)
 # Collect any new species from dfHeadLength.
 dfMasterSpecies <- AppendToMasterSpeciesDf(dfHeadLength, dfMasterSpecies)
 
 # TRAIT: Body depth.
 # Filtering for presence of body depth data. This is for the univariate analyses section.
+# Does the trait pass the tests for inclusion in analyses?
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes! 
 dfBodyDepth <- setDT(GetTraitSpecificData(dfMorphometricTraits, 6))
+# TEST 2: Does the trait have enough data variation?
+hist(dfBodyDepth$body_depth)
 # Collect any new species from dfBodyDepth.
 dfMasterSpecies <- AppendToMasterSpeciesDf(dfBodyDepth, dfMasterSpecies)
 
 # TRAIT: Aspect Ratio.
 # Filtering for presence of aspect ratio data. This is for the univariate analyses section.
+# Does the trait pass the tests for inclusion in analyses?
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes! 
 dfAspectRatio <- setDT(GetTraitSpecificData(dfMorphometricTraits, 7))
+# TEST 2: Does the trait have enough data variation?
+hist(dfAspectRatio$aspect_ratio)
 # Collect any new species from dfAspectRatio.
 dfMasterSpecies <- AppendToMasterSpeciesDf(dfAspectRatio, dfMasterSpecies)
 

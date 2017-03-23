@@ -1363,94 +1363,194 @@ dfDietMV <- merge(dfTroph, dfDiet, all.x = TRUE, by = "species_name")
 
 
 ### LIFE HISTORY RELATED ###
-# Fecundity.
-#dfFecundity <- data.frame(fecundity(speciesNames))
-#write.csv(dfFecundity, file = "fecundity_information.csv") 
-# Read in the fecundity information.
-dfFecundity <- fread("fecundity_information.csv")
-colnames(dfFecundity)[4] <- "species_name"
-
-# FecundityMin, WeightMin, LengthFecunMin, FecundityMax, WeightMax, LengthFecunMax, LengthTypeFecMac, SpawningCycles
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 # Maturity.
-dfMaturity <- data.frame(maturity(speciesNames))
-write.csv(dfMaturity, file = "maturity_information.csv") 
+#dfMaturity <- data.frame(maturity(speciesNames))
+#write.csv(dfMaturity, file = "maturity_information.csv") 
 # Read in the maturity information.
 dfMaturity <- fread("maturity_information.csv")
-colnames(dfMaturity)[3] <- "species_name"
+# Datatable reorganization and renaming. Renaming column names to keep variable
+# syntax consistent throughout the pipeline.
+dfMaturityTraits <- dfMaturity[, .(species_name = sciname, sex = Sex, age_at_maturity = tm)]
+# Should sex be a control variable here?
 
-# Sex, AgeMatMin (lower range), AgeMatMin2 (upper range), tm (age at maturity)
-
+# Median trait(s).
+# TRAIT: Age at maturity.
+# The column must first be converted to double (numeric) type.
+dfAgeMaturity <- dfMaturityTraits[, age_at_maturity := as.double(age_at_maturity)]
+# The median value is then determined for each species.
+dfAgeMaturity[, age_at_maturity := median(age_at_maturity, na.rm = TRUE), keyby = species_name]
+# Filtering for presence of average depth data. This is for the univariate analyses section.
+# 500 SPECIES TEST: 374 but keeping because interesting trait.
+dfAgeMaturity <- setDT(GetTraitSpecificData(dfAgeMaturity, 5))
+# TEST 2: Does the trait have enough data variation?
+# Answer: Skewed.
+hist(dfAgeMaturity$age_at_maturity)
+# Collect any new species.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfAgeMaturity, dfMasterSpecies)
 
 
 # Reproduction.
-dfReproduction <- data.frame(reproduction(speciesNames))
-write.csv(dfReproduction, file = "reproduction_information.csv") 
+#dfReproduction <- data.frame(reproduction(speciesNames))
+#write.csv(dfReproduction, file = "reproduction_information.csv") 
 # Read in the reproduction information.
 dfReproduction <- fread("reproduction_information.csv")
-colnames(dfReproduction)[4] <- "species_name"
-
-# ReproMode, Fertilization, MatingSystem, Spawning, BatchSpawner, RepGuild1, RepGuild2,
-# ParentalCare, ParentalCareQ
-
-
-# Spawning.
-dfSpawning <- data.frame(spawning(speciesNames))
-write.csv(dfSpawning, file = "spawning_information.csv") 
-# Read in the spawning information.
-dfSpawning <- fread("spawning_information.csv")
-colnames(dfSpawning)[3] <- "species_name"
-
-# SpawningGround, TempLow, TempHigh, WeightMin, WeightMax
+# Datatable reorganization and renaming. Renaming column names to keep variable
+# syntax consistent throughout the pipeline.
+dfReproTraits <- dfReproduction[, .(species_name = sciname, repro_mode = ReproMode, 
+                                    fertilization = Fertilization, mating_system = MatingSystem,
+                                    rep_guild_1 = RepGuild1, rep_guild_2 = RepGuild2, 
+                                    parental_care = ParentalCare)]
+# Unlikely to vary within species.
+dfReproTraits <- dfReproTraits[!duplicated(dfReproTraits$species_name), ]
+# First, change all of the traits to factor type.
+changeVars <- c(2:7)
+dfReproTraits[, (changeVars) := lapply(.SD, as.factor), .SDcols = changeVars]
 
 
+# TRAIT: Repro mode.
+# Filtering for presence of trait data. This is for the univariate analyses section.
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes!
+dfReproMode <- setDT(GetTraitSpecificData(dfReproTraits, 2))
+# TEST 2: Does the trait have enough data variation?
+# Answer:
+table(dfReproMode$repro_mode)
+rareVars <- which(dfReproMode$repro_mode == "true hermaphroditism")
+dfReproMode <- dfReproMode[-rareVars, ]
+# Also dropping these levels from the factor.
+dfReproMode$repro_mode <- droplevels(dfReproMode$repro_mode)
+# Collect any new species.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfReproMode, dfMasterSpecies)
+
+# TRAIT: Fertilization.
+# Filtering for presence of trait data. This is for the univariate analyses section.
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes!
+dfFert <- setDT(GetTraitSpecificData(dfReproTraits, 3))
+# TEST 2: Does the trait have enough data variation?
+# Answer: A couple rare categories will be removed.
+table(dfFert$fertilization)
+rareVars <- which(dfFert$fertilization == "in mouth" | dfFert$fertilization == "other")
+dfFert <- dfFert[-rareVars, ]
+# Also dropping these levels from the factor.
+dfFert$fertilization <- droplevels(dfFert$fertilization)
+# Collect any new species.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfFert, dfMasterSpecies)
+
+# TRAIT: Mating system.
+# Filtering for presence of trait data. This is for the univariate analyses section.
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: No but an interesting trait.
+dfMatingSystem <- setDT(GetTraitSpecificData(dfReproTraits, 4))
+# TEST 2: Does the trait have enough data variation?
+# Answer: A couple rare categories will be removed.
+table(dfMatingSystem$mating_system)
+# Collect any new species.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfMatingSystem, dfMasterSpecies)
+
+# TRAIT: Rep Guild 1.
+# Filtering for presence of trait data. This is for the univariate analyses section.
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes!
+dfRepGuild1 <- setDT(GetTraitSpecificData(dfReproTraits, 5))
+# TEST 2: Does the trait have enough data variation?
+# Answer: Looks good.
+table(dfRepGuild1$rep_guild_1)
+# Collect any new species.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfRepGuild1, dfMasterSpecies)
+
+# TRAIT: Rep Guild 2.
+# Filtering for presence of trait data. This is for the univariate analyses section.
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes!
+dfRepGuild2 <- setDT(GetTraitSpecificData(dfReproTraits, 6))
+# Revalue the category names so the syntax is consistent (i.e. "Polar" should be "polar").
+dfRepGuild2[, rep_guild_2 := revalue(rep_guild_2, c("Brood hiders" = "brood hiders", 
+                                                    "Clutch tenders" = "clutch tenders",
+                                                    "External brooders" = "external brooders", 
+                                                    "Nesters" = "nesters",
+                                                    "Open water/substratum egg scatterers" = "open water/substratum egg scatterers"))]
+# TEST 2: Does the trait have enough data variation?
+# Answer: Yes.
+table(dfRepGuild2$rep_guild_2)
+# Collect any new species.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfRepGuild2, dfMasterSpecies)
+
+# TRAIT: Parental care.
+# Filtering for presence of trait data. This is for the univariate analyses section.
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes!
+dfParentalCare <- setDT(GetTraitSpecificData(dfReproTraits, 7))
+# TEST 2: Does the trait have enough data variation?
+# Answer: Yes.
+table(dfParentalCare$parental_care)
+# Collect any new species.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfParentalCare, dfMasterSpecies)
 
 
 ### MORPHOMETRIC RELATED ###
 # Popchar.
-dfPopChar <- data.frame(popchar(speciesNames))
-write.csv(dfPopChar, file = "popchar_information.csv") 
+#dfPopChar <- data.frame(popchar(speciesNames))
+#write.csv(dfPopChar, file = "popchar_information.csv") 
 # Read in the popchar information.
 dfPopChar <- fread("popchar_information.csv")
-colnames(dfPopChar)[3] <- "species_name"
+# Datatable reorganization and renaming. Renaming column names to keep variable
+# syntax consistent throughout the pipeline.
+dfPopCharTraits <- dfPopChar[, .(species_name = sciname, weight_max = Wmax, 
+                                 age_max = tmax)]
 
-# Wmax, TypeWeight, Lmax, Type, tmax, 
+# Median trait(s).
+# TRAIT: Maximum weight.
+# The column must first be converted to double (numeric) type.
+dfMaxWeight <- dfPopCharTraits[, weight_max := as.double(weight_max)]
+# The median value is then determined for each species.
+dfMaxWeight[, weight_max := median(weight_max, na.rm = TRUE), keyby = species_name]
+# Filtering for presence of average depth data. This is for the univariate analyses section.
+# 500 SPECIES TEST: PASS.
+dfMaxWeight <- setDT(GetTraitSpecificData(dfMaxWeight, 2))
+# TEST 2: Does the trait have enough data variation?
+# Answer: Skewed.
+hist(dfMaxWeight$weight_max)
+# Collect any new species.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfMaxWeight, dfMasterSpecies)
+
+# TRAIT: Maximum age.
+# The column must first be converted to double (numeric) type.
+dfMaxAge <- dfPopCharTraits[, age_max := as.double(age_max)]
+# The median value is then determined for each species.
+dfMaxAge[, age_max := median(age_max, na.rm = TRUE), keyby = species_name]
+# Filtering for presence of average depth data. This is for the univariate analyses section.
+# 500 SPECIES TEST: PASS.
+dfMaxAge <- setDT(GetTraitSpecificData(dfMaxAge, 3))
+# TEST 2: Does the trait have enough data variation?
+# Answer: Skewed.
+hist(dfMaxAge$age_max)
+# Collect any new species.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfMaxAge, dfMasterSpecies)
+
+
+
 
 
 ### PHYSIOLOGY RELATED ###
 # Oxygen.
-dfOxygen <- data.frame(oxygen(speciesNames))
-write.csv(dfOxygen, file = "oxygen_information.csv") 
+#dfOxygen <- data.frame(oxygen(speciesNames))
+#write.csv(dfOxygen, file = "oxygen_information.csv") 
 # Read in the oxygen information.
 dfOxygen <- fread("oxygen_information.csv")
-colnames(dfOxygen)[4] <- "species_name"
 
 # Weight, Temp, Oxygen, Oxygenmgl, OxygenCons, MetabolicLevel
+# LEFT OFF HERE!
 
 
 # Speed.
-dfSpeed <- data.frame(speed(speciesNames))
-write.csv(dfSpeed, file = "speed_information.csv") 
+#dfSpeed <- data.frame(speed(speciesNames))
+#write.csv(dfSpeed, file = "speed_information.csv") 
 # Read in the speed information.
 dfSpeed <- fread("speed_information.csv")
 colnames(dfSpeed)[4] <- "species_name"
-
 # Speedms, Mode
+# Not sure how to treat mode here.
 
 
 # Swimming.

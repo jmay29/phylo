@@ -652,7 +652,8 @@ dfSalTolerance[, salinity_tolerance := revalue(salinity_tolerance,
 # Collect any new species from dfEnvironSalLevel.
 dfMasterSpecies <- AppendToMasterSpeciesDf(dfSalTolerance, dfMasterSpecies)
 
-# Finally, prepare the dfEcosystemTraits datatable by merging all univariate datatables.
+# Finally, prepare the dfEcosystemMV datatable by merging all univariate datatables.
+# This datatable will be used for the eventual multivariate analysis.
 dfEcosystemMV <- merge(dfEcosystemType, dfEnvironSalLevel, all.y = TRUE, by = "species_name")
 dfEcosystemMV <- merge(dfEcosystemMV, dfClimate, all.x = TRUE, by = "species_name")
 dfEcosystemMV <- merge(dfEcosystemMV, dfAvgDepth, all.x = TRUE, by = "species_name")
@@ -688,7 +689,8 @@ medianVars <- c(2:7) # TL, SL, FL, HL, BD, AR columns.
 dfMorphometricTraits[, (medianVars) := lapply(.SD, function(x) median(x, na.rm = TRUE)),
                      by = species_name, .SDcols = medianVars]
 # I only want one row per species.
-dfMorphometricTraits <- dfMorphometricTraits[!duplicated(dfMorphometricTraits$species_name), ] 
+dfMorphometricTraits <- dfMorphometricTraits[!duplicated(dfMorphometricTraits$species_name), ]
+
 # TRAIT: Total length.
 # Filtering for presence of total length data. This is for the univariate analyses section.
 # Does the trait pass the tests for inclusion in analyses?
@@ -755,8 +757,13 @@ hist(dfAspectRatio$aspect_ratio)
 # Collect any new species from dfAspectRatio.
 dfMasterSpecies <- AppendToMasterSpeciesDf(dfAspectRatio, dfMasterSpecies)
 
-# IDEA: Apply these functions across dataframe. Esepcially important for eclogy
-# traits since there are so many!
+# Finally, prepare the dfMorphometricMV datatable by merging all univariate datatables.
+# This datatable will be used for the eventual multivariate analysis.
+dfMorphometricMV <- merge(dfTotalLength, dfStandardLength, all.x = TRUE, by = "species_name")
+dfMorphometricMV <- merge(dfMorphometricMV, dfForkLength, all.x = TRUE, by = "species_name")
+dfMorphometricMV <- merge(dfMorphometricMV, dfHeadLength, all.x = TRUE, by = "species_name")
+dfMorphometricMV <- merge(dfMorphometricMV, dfBodyDepth, all.x = TRUE, by = "species_name")
+dfMorphometricMV <- merge(dfMorphometricMV, dfAspectRatio, all.x = TRUE, by = "species_name")
 
 
 ### MORPHOLOGY TRAITS ###
@@ -777,8 +784,6 @@ dfMorphologyTraits <- dfMorphologyTraits[!duplicated(dfMorphologyTraits$species_
 # Converting to factor type as these are discrete traits.
 changeVars <- c(2:6)
 dfMorphologyTraits[, (changeVars) := lapply(.SD, as.factor), .SDcols = changeVars]
-# Also, recode operculum_present.
-dfMorphologyTraits[, operculum_present := revalue(operculum_present, c("-1" = "1"))]
 
 # TRAIT: Body Shape I.
 # Filtering for presence of body shape I data. This is for the univariate analyses section.
@@ -790,7 +795,7 @@ dfBodyShapeI <- setDT(GetTraitSpecificData(dfMorphologyTraits, 2))
 table(dfBodyShapeI$body_shape_I)
 rareVars <- which(dfBodyShapeI$body_shape_I == "other")
 dfBodyShapeI <- dfBodyShapeI[-rareVars, ]
-#Also dropping this levels from the factor.
+# Also dropping this levels from the factor.
 dfBodyShapeI$body_shape_I <- droplevels(dfBodyShapeI$body_shape_I)
 # Collect any new species from dfBodyShapeI.
 dfMasterSpecies <- AppendToMasterSpeciesDf(dfBodyShapeI, dfMasterSpecies)
@@ -805,7 +810,7 @@ dfBodyShapeII <- setDT(GetTraitSpecificData(dfMorphologyTraits, 3))
 table(dfBodyShapeII$body_shape_II)
 rareVars <- which(dfBodyShapeII$body_shape_II == "other (see Diagnosi" | dfBodyShapeII$body_shape_II == "angular")
 dfBodyShapeII <- dfBodyShapeII[-rareVars, ]
-#Also dropping this levels from the factor.
+# Also dropping this levels from the factor.
 dfBodyShapeII$body_shape_II <- droplevels(dfBodyShapeII$body_shape_II)
 # Collect any new species from dfBodyShapeII.
 dfMasterSpecies <- AppendToMasterSpeciesDf(dfBodyShapeII, dfMasterSpecies)
@@ -818,6 +823,8 @@ dfOperPresent <- setDT(GetTraitSpecificData(dfMorphologyTraits, 4))
 # TEST 2: Does the trait have enough data variation?
 # Answer: Yes!
 table(dfOperPresent$operculum_present)
+# Recode the data.
+dfOperPresent[, operculum_present := revalue(operculum_present, c("-1" = "1"))]
 # Collect any new species from dfOperPresent.
 dfMasterSpecies <- AppendToMasterSpeciesDf(dfOperPresent, dfMasterSpecies)
 
@@ -849,6 +856,12 @@ dfScaleType$type_of_scales <- droplevels(dfScaleType$type_of_scales)
 # Collect any new species from dfScaleType.
 dfMasterSpecies <- AppendToMasterSpeciesDf(dfScaleType, dfMasterSpecies)
 
+# Finally, prepare the dfMorphologyMV datatable by merging all univariate datatables.
+# This datatable will be used for the eventual multivariate analysis.
+dfMorphologyMV <- merge(dfBodyShapeI, dfBodyShapeII, all.x = TRUE, by = "species_name")
+dfMorphologyMV <- merge(dfMorphologyMV, dfOperPresent, all.y = TRUE, by = "species_name")
+dfMorphologyMV <- merge(dfMorphologyMV, dfPosMouth, all.x = TRUE, by = "species_name")
+dfMorphologyMV <- merge(dfMorphologyMV, dfScaleType, all.x = TRUE, by = "species_name")
 
 
 ### ECOLOGY TRAITS ###
@@ -860,7 +873,7 @@ dfEcology <- fread("ecology_information.csv")
 colnames(dfEcology)[3] <- "species_name"
 # Get rid of columns I do not need for the regression analysis. 
 # Note: There is only one row per species in dfEcology.
-dfEcologyTraits <- dfEcology[, c(3, 7:27, 29, 31, 33, 39, 52:57, 66:78,
+dfEcologyTraits <- dfEcology[, c(3, 7:27, 29, 31, 33, 39, 52, 66:78,
                                  80:88, 90:110, 117:118, 121)]
 # Recode ecology traits to the types needed for regression analysis.
 # Which columns are integers?
@@ -883,10 +896,11 @@ rm(changeVars)
 
 # There are a lot of traits here so I am going to use nearZeroVar to cut a lot of them at once.
 # AKA Cutting traits that have little variation (rarer categories less than 1%).
-# The remaining traits automically pass the variation test but I will still be looking
+# The remaining traits automically pass the variation test but I will still look more
 # closely at non-binary traits.
 dfEcologyTraits <- as.data.frame(dfEcologyTraits)
 dfEcologyTraits <- dfEcologyTraits[, -nearZeroVar(dfEcologyTraits, freqCut = 99/1)]
+
 
 # Categorical traits.
 # Binary traits.
@@ -979,19 +993,7 @@ dfMasterSpecies <- AppendToMasterSpeciesDf(dfLakes, dfMasterSpecies)
 # Answer: Yes!
 dfSchooling <- setDT(GetTraitSpecificData(dfEcologyTraits, 16))
 # Collect any new species.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfHerbivory, dfMasterSpecies)
-
-# TRAIT: SchoolingFrequency.
-# Filtering for presence of trait data.
-# TEST 1: Does trait have data for at least 500 species?
-# Answer: No!
-dfSchoolingFrequency <- setDT(GetTraitSpecificData(dfEcologyTraits, 17))
-# Remove this trait.
-dfEcologyTraits$SchoolingFrequency <- NULL
-# Same case for these traits...
-dfEcologyTraits$SchoolingLifestage <- NULL
-dfEcologyTraits$ShoalingFrequency <- NULL
-dfEcologyTraits$ShoalingLifestage <- NULL
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfSchooling, dfMasterSpecies)
 
 # TRAIT: Benthic.
 # Filtering for presence of trait data. 
@@ -1136,7 +1138,33 @@ hist(dfFoodTroph$FoodTroph)
 # Collect any new species from dfFoodTroph.
 dfMasterSpecies <- AppendToMasterSpeciesDf(dfFoodTroph, dfMasterSpecies)
 
-
+# Finally, prepare the dfEcologyMV datatable by merging all univariate datatables.
+dfEcologyMV <- merge(dfNeritic, dfIntertidal, by = "species_name")
+dfEcologyMV <- merge(dfEcologyMV, dfOceanic, by = "species_name")
+dfEcologyMV <- merge(dfEcologyMV, dfEpipegalic, by = "species_name")
+dfEcologyMV <- merge(dfEcologyMV, dfEpipegalic, by = "species_name")
+dfEcologyMV <- merge(dfEcologyMV, dfMesopelagic, by = "species_name")
+dfEcologyMV <- merge(dfEcologyMV, dfBathypelagic, by = "species_name")
+dfEcologyMV <- merge(dfEcologyMV, dfEstuaries, by = "species_name")
+dfEcologyMV <- merge(dfEcologyMV, dfMangroves, by = "species_name")
+dfEcologyMV <- merge(dfEcologyMV, dfStreams, by = "species_name")
+dfEcologyMV <- merge(dfEcologyMV, dfLakes, by = "species_name")
+dfEcologyMV <- merge(dfEcologyMV, dfSchooling, by = "species_name")
+dfEcologyMV <- merge(dfEcologyMV, dfBenthic, by = "species_name")
+dfEcologyMV <- merge(dfEcologyMV, dfSoftBottom, by = "species_name")
+dfEcologyMV <- merge(dfEcologyMV, dfSand, by = "species_name")
+dfEcologyMV <- merge(dfEcologyMV, dfSilt, by = "species_name")
+dfEcologyMV <- merge(dfEcologyMV, dfMud, by = "species_name")
+dfEcologyMV <- merge(dfEcologyMV, dfHardBottom, by = "species_name")
+dfEcologyMV <- merge(dfEcologyMV, dfRocky, by = "species_name")
+dfEcologyMV <- merge(dfEcologyMV, dfRubble, by = "species_name")
+dfEcologyMV <- merge(dfEcologyMV, dfMacrophyte, by = "species_name")
+dfEcologyMV <- merge(dfEcologyMV, dfSeaGrassBeds, by = "species_name")
+dfEcologyMV <- merge(dfEcologyMV, dfCoralReefs, by = "species_name")
+dfEcologyMV <- merge(dfEcologyMV, dfHerbivory, all.x = TRUE, by = "species_name")
+dfEcologyMV <- merge(dfEcologyMV, dfFeedingType, all.x = TRUE, by = "species_name")
+dfEcologyMV <- merge(dfEcologyMV, dfDietTroph, all.x = TRUE, by = "species_name")
+dfEcologyMV <- merge(dfEcologyMV, dfFoodTroph, all.x = TRUE, by = "species_name")
 
 
 ### STATUS RELATED ###

@@ -1177,9 +1177,7 @@ dfIntroductions <- fread("introductions_information.csv")
 # syntax consistent throughout the pipeline.
 dfIntroductionTraits <- dfIntroductions[, .(species_name = sciname, reason = Reason,
                                             estab_wild = Estabwild, estab_aqua = EstabAqua, 
-                                            impacts = Impacts, invasive = Invasive)]
-
-# Reason, Estabwild, EstabType, EstabAqua, ReproMode, EcolEff, EcolEffType, Impacts, Invasive
+                                            invasive = Invasive)]
 
 # Mode traits.
 # TRAIT: Reason.
@@ -1197,7 +1195,7 @@ dfIntroReason[, reason := as.factor(reason)]
 # # Filtering for presence of reason data. This is for the univariate analyses section.
 # First, does the trait pass the tests for inclusion in analyses?
 # TEST 1: Does trait have data for at least 500 species?
-# Answer: Almost.
+# Answer: Almost. Keeping it as it may serve as a control variable.
 dfIntroReason <- setDT(GetTraitSpecificData(dfIntroReason, 2))
 # TEST 2: Does the trait have enough data variation?
 # Answer: Several categories do not meet 1% threshold and will be removed.
@@ -1212,54 +1210,100 @@ dfIntroReason$reason <- droplevels(dfIntroReason$reason)
 # Collect any new species.
 dfMasterSpecies <- AppendToMasterSpeciesDf(dfIntroReason, dfMasterSpecies)
 
-
-# TRAIT: Impacts.
-# Mode trait/control variable.
-# Potentially a control variable?
-# A count column is created to count the number of reasons per species.
-dfIntroductionTraits[, count := .N, by = .(species_name, impacts)]
-# The reason with the highest number of observations per species is then selected.
-# This data replaces the original data.
-dfIntroductionTraits[order(-count), impacts := impacts[1L], by = species_name]
-# Recode reason for regression analyses.
-# Change the data to factor type.
-dfIntroductionTraits[, ecol_effects_type := as.factor(ecol_effects_type)]
-# # Filtering for presence of trait data. This is for the univariate analyses section.
-# First, does the trait pass the tests for inclusion in analyses?
-# TEST 1: Does trait have data for at least 500 species?
-# Answer: Almost.
-dfEcolEffectsType <- setDT(GetTraitSpecificData(dfIntroductionTraits, 6))
-# TEST 2: Does the trait have enough data variation?
-# Answer: Several categories do not meet 1% threshold and will be removed.
-table(dfEcolEffectsType$ecol_effects_type)
-rareVars <- which(dfIntroReason$reason == "fill ecological niche" | 
-                    dfIntroReason$reason == "forage" | dfIntroReason$reason == "forage" |
-                    dfIntroReason$reason == "off-site preservation" |
-                    dfIntroReason$reason == "research" | dfIntroReason$reason == "snail control")
-dfIntroReason <- dfIntroReason[-rareVars, ]
-# Also dropping these levels from the factor.
-dfIntroReason$reason <- droplevels(dfIntroReason$reason)
-# Collect any new species.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfIntroReason, dfMasterSpecies)
-
-
-
-# TRAIT: Impacts.
-# Mode trait.
-
-
 # Special cases.
-
 # TRAIT: Established in the wild.
-# If established in the wild anywhere.
+# If the species is established in wild...
+DetermineIfSpeciesEstabWild <- function(x) {
+  answer <- NULL
+  containsEstablished <- length(grep("^established$", x))
+  # If the species is established in the wild anywhere...
+  if (containsEstablished > 0) {
+    # It will be assigned "1".
+    answer <- "1" 
+  } else {
+    # Else, it will be assigned "0".
+    answer <- "0"
+  } 
+  return(answer)
+}
+# Apply the function to the appropriate column in the datatable.
+dfIntroductionTraits[, estab_wild_YN := DetermineIfSpeciesEstabWild(estab_wild), by = species_name]
+# Filtering for presence of endemicity data. This is for the univariate analyses section.
+# 500 SPECIES TEST: PASS.
+dfEstabWild <- setDT(GetTraitSpecificData(dfIntroductionTraits, 6))
+# TEST 2: Does the trait have enough data variation?
+# Answer: PASS.
+table(dfEstabWild$estab_wild_YN)
+# Recode trait for regression analyses.
+# Change the data to factor type.
+dfEstabWild[, estab_wild_YN := as.factor(estab_wild_YN)]
+# Collect any new species.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfEstabWild, dfMasterSpecies)
+
 
 # TRAIT: Established in aquaculture.
-# If established in aquaculture anywhere.
+# If the species is established in aquaculture...
+DetermineIfSpeciesEstabAqua <- function(x) {
+  answer <- NULL
+  containsEstablished <- length(grep("-1", x))
+  # If the species is established in aqua anywhere...
+  if (containsEstablished > 0) {
+    # It will be assigned "1".
+    answer <- "1" 
+  } else {
+    # Else, it will be assigned "0".
+    answer <- "0"
+  } 
+  return(answer)
+}
+# Apply the function to the appropriate column in the datatable.
+dfIntroductionTraits[, estab_aqua_YN := DetermineIfSpeciesEstabAqua(estab_aqua), by = species_name]
+# Filtering for presence of endemicity data. This is for the univariate analyses section.
+# 500 SPECIES TEST: PASS.
+dfEstabAqua <- setDT(GetTraitSpecificData(dfIntroductionTraits, 7))
+# TEST 2: Does the trait have enough data variation?
+# Answer: PASS.
+table(dfEstabAqua$estab_aqua_YN)
+# Recode trait for regression analyses.
+# Change the data to factor type.
+dfEstabAqua[, estab_aqua_YN := as.factor(estab_aqua_YN)]
+# Collect any new species.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfEstabAqua, dfMasterSpecies)
 
-# TRAIT: Invasive
-# If invasive anywhere.
 
+# TRAIT: Invasive.
+# If the species is invasive anywhere.
+DetermineIfSpeciesInvasive <- function(x) {
+  answer <- NULL
+  containsInvasive <- length(grep("-1", x))
+  # If the species is invasive anywhere...
+  if (containsInvasive > 0) {
+    # It will be assigned "1".
+    answer <- "1" 
+  } else {
+    # Else, it will be assigned "0".
+    answer <- "0"
+  } 
+  return(answer)
+}
+# Apply the  function to the appropriate column in the datatable.
+dfIntroductionTraits[, invasive_YN := DetermineIfSpeciesInvasive(invasive), by = species_name]
+# Filtering for presence of endemicity data. This is for the univariate analyses section.
+# 500 SPECIES TEST: PASS.
+dfInvasive <- setDT(GetTraitSpecificData(dfIntroductionTraits, 8))
+# TEST 2: Does the trait have enough data variation?
+# Answer: PASS.
+table(dfInvasive$invasive_YN)
+# Recode trait for regression analyses.
+# Change the data to factor type.
+dfInvasive[, invasive_YN := as.factor(invasive_YN)]
+# Collect any new species.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfInvasive, dfMasterSpecies)
 
+# Finally, prepare the dfIntroductionMV datatable by merging all univariate datatables.
+dfIntroductionMV <- merge(dfIntroReason, dfEstabWild, all.y = TRUE, by = "species_name")
+dfIntroductionMV <- merge(dfIntroductionMV, dfEstabAqua, by = "species_name")
+dfIntroductionMV <- merge(dfIntroductionMV, dfInvasive, by = "species_name")
 
 
 
@@ -1273,8 +1317,49 @@ dfDiet <- fread("diet_information.csv")
 # syntax consistent throughout the pipeline.
 dfDietTraits <- dfDiet[, .(species_name = sciname, troph = Troph, diet = FoodI)]
 
-# Troph = median trait
-# Diet = mode trait
+# Median trait(s).
+# TRAIT: Troph.
+# The column must first be converted to double (numeric) type.
+dfTroph <- dfDietTraits[, troph := as.double(troph)]
+# The median value is then determined for each species.
+dfTroph[, troph := median(troph, na.rm = TRUE), keyby = species_name]
+# Filtering for presence of average depth data. This is for the univariate analyses section.
+# 500 SPECIES TEST: PASS.
+dfTroph <- setDT(GetTraitSpecificData(dfTroph, 2))
+# TEST 2: Does the trait have enough data variation?
+# Answer: Looks good.
+hist(dfTroph$troph)
+# Collect any new species from dfAvgDepth.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfTroph, dfMasterSpecies)
+
+# Mode trait(s).
+# TRAIT: Diet.
+# No NA values here!
+# A count column is created to count the number of reasons per species.
+dfDiet <- dfDietTraits[, count := .N, by = .(species_name, diet)]
+# The reason with the highest number of observations per species is then selected.
+# This data replaces the original data.
+dfDiet[order(-count), diet := diet[1L], by = species_name]
+# Recode reason for regression analyses.
+# Change the data to factor type.
+dfDiet[, diet := as.factor(diet)]
+# # Filtering for presence of reason data. This is for the univariate analyses section.
+# First, does the trait pass the tests for inclusion in analyses?
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes!
+dfDiet <- setDT(GetTraitSpecificData(dfDiet, 3))
+# TEST 2: Does the trait have enough data variation?
+# Answer: Two categories do not meet 1% threshold and will be removed.
+table(dfDiet$diet)
+rareVars <- which(dfDiet$diet == "detritus" | dfDiet$diet == "others")
+dfDiet <- dfDiet[-rareVars, ]
+# Also dropping these levels from the factor.
+dfDiet$diet <- droplevels(dfDiet$diet)
+# Collect any new species.
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfDiet, dfMasterSpecies)
+
+# Finally, prepare the dfDietMV datatable by merging all univariate datatables.
+dfDietMV <- merge(dfTroph, dfDiet, all.x = TRUE, by = "species_name")
 
 
 ### LIFE HISTORY RELATED ###
@@ -1286,6 +1371,20 @@ dfFecundity <- fread("fecundity_information.csv")
 colnames(dfFecundity)[4] <- "species_name"
 
 # FecundityMin, WeightMin, LengthFecunMin, FecundityMax, WeightMax, LengthFecunMax, LengthTypeFecMac, SpawningCycles
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 # Maturity.

@@ -393,7 +393,7 @@ GetTraitSpecificData <- function(x, y) {
   # Find rows without data for column.
   noY <- is.na(x[, y])
   noY <- which(noY == "TRUE")
-  # Construct the univariate trait datatable. This datatable will be used in the eventually 
+  # Construct the univariate trait datatable. This datatable will be used in the eventual 
   # univariate analysis.
   # If there are rows without data for column...
   if (length(noY) > 0) {
@@ -413,7 +413,7 @@ GetTraitSpecificData <- function(x, y) {
   rm(noY)
   return(z)
 }
-# Filtering for presence of ecosystem_type data. This is for the univariate analyses section.
+# Filtering for presence of trait data. This is for the univariate analyses section.
 # First, does the trait pass the tests for inclusion in analyses?
 # TEST 1: Does trait have data for at least 500 species?
 # Answer: Yes!
@@ -430,30 +430,32 @@ dfMasterSpecies <- dfEcosystemType[, 1]
 
 
 # TRAIT: Environmental salinity level.
+# There are no NA values for salinity, so proceed.
+# A count column is created to count the number of trait category observations per species.
 dfEnvironSalLevel <- dfEcosystemTraits[, count := .N, by = .(species_name, salinity)]
+# The trait category with the highest number of observations per species is then selected.
+# This data replaces the original data.
 dfEnvironSalLevel[order(-count), env_salinity_level := salinity[1L], by = species_name]
-# Recode env_salinity_level for regression analyses.
 # Change the data to factor type.
 dfEnvironSalLevel[, env_salinity_level := as.factor(env_salinity_level)]
-# Three-level factor type trait.
-# EDIT: Need error/flag statements when a value isn't present
-dfEnvironSalLevel[, env_salinity_level := revalue(env_salinity_level, 
-                                                  c("freshwater" = "0", 
-                                                    "saltwater" = "1"))]
 # Filtering for presence of env_salinity_level data. This is for the univariate analyses section.
 # Does the trait pass the tests for inclusion in analyses?
 # TEST 1: Does trait have data for at least 500 species?
 # Answer: Yes!
 dfEnvironSalLevel <- setDT(GetTraitSpecificData(dfEnvironSalLevel, 11))
 # TEST 2: Does the trait have enough data variation?
-# Answer: Brackish water was rare and was removed.
+# Answer: Brackish water is too rare and will be removed.
 table(dfEnvironSalLevel$env_salinity_level)
 rareVars <- which(dfEnvironSalLevel$env_salinity_level == "brackish")
 dfEnvironSalLevel <- dfEnvironSalLevel[-rareVars, ]
-# Also dropping this levels from the factor.
+# Also dropping this level from the factor.
 dfEnvironSalLevel$env_salinity_level <- droplevels(dfEnvironSalLevel$env_salinity_level)
-# Also remove the "brackish" level.
-# I will be adding unique species to the master phylogeny a lot.
+# Recode the trait for use in regression analyses.
+dfEnvironSalLevel[, env_salinity_level := revalue(env_salinity_level, 
+                                                  c("freshwater" = "0", 
+                                                    "saltwater" = "1"))]
+# I will be adding unique species to the master phylogeny a lot so a function is
+# created to make this easier.
 AppendToMasterSpeciesDf <- function(trait_data, df_to_append_to) {
   # Collect unique species.
   dfAddSpecies <- trait_data[, 1]
@@ -474,10 +476,12 @@ dfClimate <- dfEcosystemTraits[-which(is.na(dfEcosystemTraits$climate)), ]
 # First, revalue the category names so the syntax is consistent (i.e. "Polar" should be "polar").
 dfClimate[, climate := revalue(climate, c("Boreal" = "boreal", "Polar" = "polar",
                                           "Subtropical" = "subtropical", "Temperate" = "temperate",
-                                           "Tropical" = "tropical"))]
+                                          "Tropical" = "tropical"))]
+# A count column is created to count the number of trait category observations per species.
 dfClimate[, count := .N, by = .(species_name, climate)]
+# The trait category with the highest number of observations per species is then selected.
+# This data replaces the original data.
 dfClimate[order(-count), climate := climate[1L], by = species_name]
-# Recode env_salinity_level for regression analyses.
 # Change the data to factor type.
 dfClimate[, climate := as.factor(climate)]
 # Filtering for presence of climate data. This is for the univariate analyses section.
@@ -490,7 +494,7 @@ dfClimate <- setDT(GetTraitSpecificData(dfClimate, 9))
 table(dfClimate$climate)
 rareVars <- which(dfClimate$climate == "boreal")
 dfClimate <- dfClimate[-rareVars, ]
-#Also dropping this levels from the factor.
+# Also dropping this levels from the factor.
 dfClimate$climate <- droplevels(dfClimate$climate)
 # Collect any new species from dfClimate.
 dfMasterSpecies <- AppendToMasterSpeciesDf(dfClimate, dfMasterSpecies)
@@ -499,7 +503,7 @@ dfMasterSpecies <- AppendToMasterSpeciesDf(dfClimate, dfMasterSpecies)
 
 # Median trait(s).
 # TRAIT: Average depth.
-# Note: These values don't seem to match up with those found on fish base.
+# Note: These values don't seem to match up with those found on fish base...
 # The column average_depth must first be converted to double (numeric) type.
 dfAvgDepth <- dfEcosystemTraits[, average_depth := as.double(average_depth)]
 # The median average_depth is then determined for each species.
@@ -558,7 +562,6 @@ hist(dfTempDepth$temp_depth)
 dfMasterSpecies <- AppendToMasterSpeciesDf(dfTempDepth, dfMasterSpecies)
 
 
-
 # Special cases.
 # These are traits for which additional steps are required to pick the representative value.
 # INTRODUCED VS. NOT INTRODUCED.
@@ -597,15 +600,19 @@ DetermineIfSpeciesEndemic <- function(x) {
 # Apply the DetermineIfSpeciesEndemic function to the appropriate column in the datatable.
 dfEndemic <- dfEcosystemTraits[, endemic := DetermineIfSpeciesEndemic(status), by = species_name]
 # Filtering for presence of endemicity data. This is for the univariate analyses section.
-# 500 SPECIES TEST: PASS 
+# 500 SPECIES TEST: PASS.
 dfEndemic <- setDT(GetTraitSpecificData(dfEndemic, 12))
 # TEST 2: Does the trait have enough data variation?
 # Answer: PASS.
 table(dfEndemic$endemic)
-# Collect any new species from dfTempDepth.
+# Recode trait for regression analyses.
+# Change the data to factor type.
+dfEndemic[, endemic := as.factor(endemic)]
+# Two-level factor type trait.
+# EDIT: Need error/flag statements when a value isn't present
+dfEndemic[, endemic := revalue(endemic, c("No" = "0", "Yes" = "1"))]
+# Collect any new species.
 dfMasterSpecies <- AppendToMasterSpeciesDf(dfEndemic, dfMasterSpecies)
-# Don't need this column anymore.
-dfEcosystemTraits$status <- NULL
 
 
 # SALINITY TOLERANCE
@@ -628,7 +635,13 @@ DetermineSalinityTolerance <- function(x) {
 
 # Apply the DetermineSalinityTolerance function to the appropriate column in the datatable.
 dfSalTolerance <- dfEcosystemTraits[, salinity_tolerance := DetermineSalinityTolerance(salinity), by = species_name]
-# Recode env_salinity_level for regression analyses.
+# Filtering for presence of salinity tolerance data. This is for the univariate analyses section.
+# 500 SPECIES TEST: PASS 
+dfSalTolerance <- setDT(GetTraitSpecificData(dfSalTolerance, 13))
+# TEST 2: Does the trait have enough data variation?
+# Answer: PASS.
+table(dfSalTolerance$salinity_tolerance)
+# Recode trait for regression analyses.
 # Change the data to factor type.
 dfSalTolerance[, salinity_tolerance := as.factor(salinity_tolerance)]
 # Two-level factor type trait.
@@ -636,20 +649,18 @@ dfSalTolerance[, salinity_tolerance := as.factor(salinity_tolerance)]
 dfSalTolerance[, salinity_tolerance := revalue(salinity_tolerance, 
                                                c("stenohaline" = "0", 
                                                  "euryhaline" = "1"))]
-# Filtering for presence of salinity tolerance data. This is for the univariate analyses section.
-# 500 SPECIES TEST: PASS 
-dfSalTolerance <- setDT(GetTraitSpecificData(dfSalTolerance, 12))
-# TEST 2: Does the trait have enough data variation?
-# Answer: PASS.
-table(dfSalTolerance$salinity_tolerance)
 # Collect any new species from dfEnvironSalLevel.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfEnvironSalLevel, dfMasterSpecies)
+dfMasterSpecies <- AppendToMasterSpeciesDf(dfSalTolerance, dfMasterSpecies)
 
-# Finally, prepare the dfEcosystemTraits datatable for the multivariate analysis
-# by taking only a single row per species.
-# Need to alter this by merging all univariate dfs.
-dfEcosystemTraits <- dfEcosystemTraits[!duplicated(dfEcosystemTraits$species_name), ] 
-# LEFT OFF HERE.
+# Finally, prepare the dfEcosystemTraits datatable by merging all univariate datatables.
+dfEcosystemMV <- merge(dfEcosystemType, dfEnvironSalLevel, all.y = TRUE, by = "species_name")
+dfEcosystemMV <- merge(dfEcosystemMV, dfClimate, all.x = TRUE, by = "species_name")
+dfEcosystemMV <- merge(dfEcosystemMV, dfAvgDepth, all.x = TRUE, by = "species_name")
+dfEcosystemMV <- merge(dfEcosystemMV, dfMaxDepth, all.x = TRUE, by = "species_name")
+dfEcosystemMV <- merge(dfEcosystemMV, dfTempSurface, all.x = TRUE, by = "species_name")
+dfEcosystemMV <- merge(dfEcosystemMV, dfTempDepth, all.x = TRUE, by = "species_name")
+dfEcosystemMV <- merge(dfEcosystemMV, dfEndemic, all.y = TRUE, by = "species_name")
+dfEcosystemMV <- merge(dfEcosystemMV, dfSalTolerance, by = "species_name")
 
 
 ### MORPHOMETRICS TRAITS ###

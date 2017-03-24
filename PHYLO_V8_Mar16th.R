@@ -303,14 +303,64 @@ dfLatitudeSpecies[, lat_min := min(lat_num), keyby = bin_uri]
 dfLatitudeSpecies[, lat_max := max(lat_num), keyby = bin_uri]
 # Determine a latitude range for each BIN.
 dfLatitudeSpecies[, lat_range := abs(lat_max - lat_min), keyby = bin_uri]
+
+# Creating datatables for univariate analyses of latitude and latitudinal range traits.
+# TRAIT: Latitude.
+# Filtering for presence of trait data. This is for the univariate analyses section.
+GetTraitSpecificData <- function(x, y) {
+  # Filters a dataframe for only those data related to a specified trait.
+  # x = dataframe of species and trait information.
+  # y = trait
+  
+  x <- as.data.frame(x)  # Still want to figure this out for datatable.
+  # Find rows without data for column.
+  noY <- is.na(x[, y])
+  noY <- which(noY == "TRUE")
+  # Construct the univariate trait datatable. This datatable will be used in the eventual 
+  # univariate analysis.
+  # If there are rows without data for column...
+  if (length(noY) > 0) {
+    # Remove the species without data for column.
+    z <- x[-noY, ]
+    # Reorganize datatable.
+    z <- z[c(1, 10, y)]
+    # Remove duplicate entries.
+    z <- z[!duplicated(z$bin_uri), ] 
+    # If all rows have data for column...
+  } else {
+    # If no entries need to be removed, just rename and reorganize x.
+    z <- x[c(1, 10, y)]
+    # Remove duplicate entries.
+    z <- z[!duplicated(z$bin_uri), ]  
+  }
+  rm(noY)
+  return(z)
+}
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes!
+dfLatitude <- setDT(GetTraitSpecificData(dfLatitudeSpecies, 14))
+# TEST 2: Does the trait have enough data variation?
+# Answer: Yes.
+hist(dfLatitude$median_lat)
+
+# Trait: Latitudinal range.
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes!
+dfLatRange <- setDT(GetTraitSpecificData(dfLatitudeSpecies, 17))
+# TEST 2: Does the trait have enough data variation?
+# Answer: Skewed.
+hist(dfLatRange$lat_range)
+
+# Finally, prepare the dfLatitudeMV datatable by merging all univariate datatables.
+# This datatable will be used for the eventual multivariate analysis.
+dfLatitudeMV <- merge(dfLatitude, dfLatRange, by = "bin_uri")
+
+
 ################################################################################
 
 # Datatable reorganzation for dfFiltered.
 dfFiltered <- dfFiltered[, .(bin_uri, recordID, order_name, species_name = species_label, 
                              nucleotides, initial_bin_size, filtered_bin_size)]
-# Building a datatable containing nucleotide data required for a "master" phylogeny.
-#dfSpeciesForTree <- dfLatitudeSpecies[, c(1:4, 10, 7, 6, 11)]
-
 
 ################################################################################
 ### SECTION 2: FISHBASE TRAITS ###
@@ -384,6 +434,7 @@ dfEcosystemType[, ecosystem_type := revalue(ecosystem_type,
                                                 "Seamount" = "5",
                                                 "Zoogeographic realm" = NA))]
 # Univariate section.
+# Species version of GetTraitSpecificData (vs. BIN version).
 GetTraitSpecificData <- function(x, y) {
   # Filters a dataframe for only those data related to a specified trait.
   # x = dataframe of species and trait information.
@@ -425,9 +476,6 @@ rareVars <- which(dfEcosystemType$ecosystem_type == 4 | dfEcosystemType$ecosyste
 dfEcosystemType <- dfEcosystemType[-rareVars, ]
 # Also dropping these levels from the factor.
 dfEcosystemType$ecosystem_type <- droplevels(dfEcosystemType$ecosystem_type)
-# Create a master species list for eventually master phylogeny.
-dfMasterSpecies <- dfEcosystemType[, 1]
-
 
 # TRAIT: Environmental salinity level.
 # There are no NA values for salinity, so proceed.
@@ -454,21 +502,6 @@ dfEnvironSalLevel$env_salinity_level <- droplevels(dfEnvironSalLevel$env_salinit
 dfEnvironSalLevel[, env_salinity_level := revalue(env_salinity_level, 
                                                   c("freshwater" = "0", 
                                                     "saltwater" = "1"))]
-# I will be adding unique species to the master phylogeny a lot so a function is
-# created to make this easier.
-AppendToMasterSpeciesDf <- function(trait_data, df_to_append_to) {
-  # Collect unique species.
-  dfAddSpecies <- trait_data[, 1]
-  # Merge back to master species list.
-  df_to_append_to <- rbind(df_to_append_to, dfAddSpecies)
-  # Keep only unique species.
-  df_to_append_to <- df_to_append_to[!duplicated(df_to_append_to$species_name), ]
-  # Return the updated master species df.
-  return(df_to_append_to)
-}
-# Collect any new species from dfEnvironSalLevel.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfEnvironSalLevel, dfMasterSpecies)
-
 
 # TRAIT: Climate.
 # Get rid of NA values in the trait column so they are not considered a category.
@@ -496,8 +529,6 @@ rareVars <- which(dfClimate$climate == "boreal")
 dfClimate <- dfClimate[-rareVars, ]
 # Also dropping this levels from the factor.
 dfClimate$climate <- droplevels(dfClimate$climate)
-# Collect any new species from dfClimate.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfClimate, dfMasterSpecies)
 
 
 
@@ -514,9 +545,6 @@ dfAvgDepth <- setDT(GetTraitSpecificData(dfAvgDepth, 5))
 # TEST 2: Does the trait have enough data variation?
 # Answer: Continuous trait. Limited variation but this can be noted in discussion.
 hist(dfAvgDepth$average_depth)
-# Collect any new species from dfAvgDepth.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfAvgDepth, dfMasterSpecies)
-
 
 # TRAIT: Maximum depth.
 # The column max_depth must first be converted to double (numeric) type.
@@ -529,9 +557,6 @@ dfMaxDepth <- setDT(GetTraitSpecificData(dfMaxDepth, 6))
 # TEST 2: Does the trait have enough data variation?
 # Answer: Continuous trait. Limited variation but this can be noted in discussion.
 hist(dfMaxDepth$max_depth)
-# Collect any new species from dfMaxDepth.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfMaxDepth, dfMasterSpecies)
-
 
 # TRAIT: Surface temperature.
 # The column temp_surface must first be converted to double (numeric) type.
@@ -544,8 +569,6 @@ dfTempSurface <- setDT(GetTraitSpecificData(dfTempSurface, 7))
 # TEST 2: Does the trait have enough data variation?
 # Answer: Continuous trait. Limited variation but this can be noted in discussion.
 hist(dfTempSurface$temp_surface)
-# Collect any new species from dfTempSurface.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfTempSurface, dfMasterSpecies)
 
 # TRAIT: Depth temperature.
 # The column temp_depth must first be converted to double (numeric) type.
@@ -558,8 +581,6 @@ dfTempDepth <- setDT(GetTraitSpecificData(dfTempDepth, 8))
 # TEST 2: Does the trait have enough data variation?
 # Answer: Continuous trait. Limited variation but this can be noted in discussion.
 hist(dfTempDepth$temp_depth)
-# Collect any new species from dfTempDepth.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfTempDepth, dfMasterSpecies)
 
 
 # Special cases.
@@ -611,8 +632,6 @@ dfEndemic[, endemic := as.factor(endemic)]
 # Two-level factor type trait.
 # EDIT: Need error/flag statements when a value isn't present
 dfEndemic[, endemic := revalue(endemic, c("No" = "0", "Yes" = "1"))]
-# Collect any new species.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfEndemic, dfMasterSpecies)
 
 
 # SALINITY TOLERANCE
@@ -649,8 +668,6 @@ dfSalTolerance[, salinity_tolerance := as.factor(salinity_tolerance)]
 dfSalTolerance[, salinity_tolerance := revalue(salinity_tolerance, 
                                                c("stenohaline" = "0", 
                                                  "euryhaline" = "1"))]
-# Collect any new species from dfEnvironSalLevel.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfSalTolerance, dfMasterSpecies)
 
 # Finally, prepare the dfEcosystemMV datatable by merging all univariate datatables.
 # This datatable will be used for the eventual multivariate analysis.
@@ -699,8 +716,6 @@ dfMorphometricTraits <- dfMorphometricTraits[!duplicated(dfMorphometricTraits$sp
 dfTotalLength <- setDT(GetTraitSpecificData(dfMorphometricTraits, 2))
 # TEST 2: Does the trait have enough data variation?
 hist(dfTotalLength$total_length)
-# Collect any new species from dfTotalLength.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfTotalLength, dfMasterSpecies)
 
 # TRAIT: Standard length.
 # Filtering for presence of standard length data. This is for the univariate analyses section.
@@ -710,8 +725,6 @@ dfMasterSpecies <- AppendToMasterSpeciesDf(dfTotalLength, dfMasterSpecies)
 dfStandardLength <- setDT(GetTraitSpecificData(dfMorphometricTraits, 3))
 # TEST 2: Does the trait have enough data variation?
 hist(dfStandardLength$standard_length)
-# Collect any new species from dfStandardLength.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfStandardLength, dfMasterSpecies)
 
 # TRAIT: Fork length.
 # Filtering for presence of fork length data. This is for the univariate analyses section.
@@ -721,8 +734,6 @@ dfMasterSpecies <- AppendToMasterSpeciesDf(dfStandardLength, dfMasterSpecies)
 dfForkLength <- setDT(GetTraitSpecificData(dfMorphometricTraits, 4))
 # TEST 2: Does the trait have enough data variation?
 hist(dfForkLength$fork_length)
-# Collect any new species from dfForkLength.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfForkLength, dfMasterSpecies)
 
 # TRAIT: Head length.
 # Filtering for presence of head length data. This is for the univariate analyses section.
@@ -732,8 +743,6 @@ dfMasterSpecies <- AppendToMasterSpeciesDf(dfForkLength, dfMasterSpecies)
 dfHeadLength <- setDT(GetTraitSpecificData(dfMorphometricTraits, 5))
 # TEST 2: Does the trait have enough data variation?
 hist(dfHeadLength$head_length)
-# Collect any new species from dfHeadLength.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfHeadLength, dfMasterSpecies)
 
 # TRAIT: Body depth.
 # Filtering for presence of body depth data. This is for the univariate analyses section.
@@ -743,8 +752,6 @@ dfMasterSpecies <- AppendToMasterSpeciesDf(dfHeadLength, dfMasterSpecies)
 dfBodyDepth <- setDT(GetTraitSpecificData(dfMorphometricTraits, 6))
 # TEST 2: Does the trait have enough data variation?
 hist(dfBodyDepth$body_depth)
-# Collect any new species from dfBodyDepth.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfBodyDepth, dfMasterSpecies)
 
 # TRAIT: Aspect Ratio.
 # Filtering for presence of aspect ratio data. This is for the univariate analyses section.
@@ -754,8 +761,6 @@ dfMasterSpecies <- AppendToMasterSpeciesDf(dfBodyDepth, dfMasterSpecies)
 dfAspectRatio <- setDT(GetTraitSpecificData(dfMorphometricTraits, 7))
 # TEST 2: Does the trait have enough data variation?
 hist(dfAspectRatio$aspect_ratio)
-# Collect any new species from dfAspectRatio.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfAspectRatio, dfMasterSpecies)
 
 # Finally, prepare the dfMorphometricMV datatable by merging all univariate datatables.
 # This datatable will be used for the eventual multivariate analysis.
@@ -797,8 +802,6 @@ rareVars <- which(dfBodyShapeI$body_shape_I == "other")
 dfBodyShapeI <- dfBodyShapeI[-rareVars, ]
 # Also dropping this levels from the factor.
 dfBodyShapeI$body_shape_I <- droplevels(dfBodyShapeI$body_shape_I)
-# Collect any new species from dfBodyShapeI.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfBodyShapeI, dfMasterSpecies)
 
 # TRAIT: Body Shape II.
 # Filtering for presence of body shape II data. This is for the univariate analyses section.
@@ -812,8 +815,6 @@ rareVars <- which(dfBodyShapeII$body_shape_II == "other (see Diagnosi" | dfBodyS
 dfBodyShapeII <- dfBodyShapeII[-rareVars, ]
 # Also dropping this levels from the factor.
 dfBodyShapeII$body_shape_II <- droplevels(dfBodyShapeII$body_shape_II)
-# Collect any new species from dfBodyShapeII.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfBodyShapeII, dfMasterSpecies)
 
 # TRAIT: Operculum Present.
 # Filtering for presence of operculum present data. This is for the univariate analyses section.
@@ -825,8 +826,6 @@ dfOperPresent <- setDT(GetTraitSpecificData(dfMorphologyTraits, 4))
 table(dfOperPresent$operculum_present)
 # Recode the data.
 dfOperPresent[, operculum_present := revalue(operculum_present, c("-1" = "1"))]
-# Collect any new species from dfOperPresent.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfOperPresent, dfMasterSpecies)
 
 # TRAIT: Position of Mouth.
 # Filtering for presence of position of mouth data. This is for the univariate analyses section.
@@ -836,8 +835,6 @@ dfPosMouth <- setDT(GetTraitSpecificData(dfMorphologyTraits, 5))
 # TEST 2: Does the trait have enough data variation?
 # Answer: Yes!
 table(dfPosMouth$pos_of_mouth)
-# Collect any new species from dfPosMouth.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfPosMouth, dfMasterSpecies)
 
 # TRAIT: Type of Scales.
 # First, revalue trait so "cycloid" is equivalent to "cycloid scales".
@@ -853,8 +850,6 @@ rareVars <- which(dfScaleType$type_of_scales == "other (see remark)" | dfScaleTy
 dfScaleType <- dfScaleType[-rareVars, ]
 # Also dropping this levels from the factor.
 dfScaleType$type_of_scales <- droplevels(dfScaleType$type_of_scales)
-# Collect any new species from dfScaleType.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfScaleType, dfMasterSpecies)
 
 # Finally, prepare the dfMorphologyMV datatable by merging all univariate datatables.
 # This datatable will be used for the eventual multivariate analysis.
@@ -912,176 +907,132 @@ dfNeritic <- setDT(GetTraitSpecificData(dfEcologyTraits, 2))
 # TEST 2: Does the trait have enough data variation?
 # Answer: Yes!
 table(dfNeritic$Neritic)
-# Collect any new species.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfNeritic, dfMasterSpecies)
 
 # TRAIT: Intertidal.
 # Filtering for trait data.
 # TEST 1: Does trait have data for at least 500 species?
 # Answer: Yes!
 dfIntertidal <- setDT(GetTraitSpecificData(dfEcologyTraits, 3))
-# Collect any new species.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfIntertidal, dfMasterSpecies)
 
 # TRAIT: Oceanic.
 # Filtering for trait data.
 # TEST 1: Does trait have data for at least 500 species?
 # Answer: Yes!
 dfOceanic <- setDT(GetTraitSpecificData(dfEcologyTraits, 4))
-# Collect any new species.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfOceanic, dfMasterSpecies)
 
 # TRAIT: Epipegalic.
 # Filtering for trait data.
 # TEST 1: Does trait have data for at least 500 species?
 # Answer: Yes!
 dfEpipegalic <- setDT(GetTraitSpecificData(dfEcologyTraits, 5))
-# Collect any new species.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfEpipegalic, dfMasterSpecies)
 
 # TRAIT: Mesopelagic.
 # Filtering for trait data.
 # TEST 1: Does trait have data for at least 500 species?
 # Answer: Yes!
 dfMesopelagic <- setDT(GetTraitSpecificData(dfEcologyTraits, 6))
-# Collect any new species.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfMesopelagic, dfMasterSpecies)
 
 # TRAIT: Bathypelagic.
 # Filtering for trait data.
 # TEST 1: Does trait have data for at least 500 species?
 # Answer: Yes!
 dfBathypelagic <- setDT(GetTraitSpecificData(dfEcologyTraits, 7))
-# Collect any new species.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfBathypelagic, dfMasterSpecies)
 
 # TRAIT: Estuaries.
 # Filtering for trait data.
 # TEST 1: Does trait have data for at least 500 species?
 # Answer: Yes!
 dfEstuaries <- setDT(GetTraitSpecificData(dfEcologyTraits, 8))
-# Collect any new species.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfEstuaries, dfMasterSpecies)
 
 # TRAIT: Mangroves.
 # Filtering for trait data.
 # TEST 1: Does trait have data for at least 500 species?
 # Answer: Yes!
 dfMangroves <- setDT(GetTraitSpecificData(dfEcologyTraits, 9))
-# Collect any new species.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfMangroves, dfMasterSpecies)
 
 # TRAIT: Stream.
 # Filtering for presence of type of stream data. This is for the univariate analyses section.
 # TEST 1: Does trait have data for at least 500 species?
 # Answer: Yes!
 dfStreams <- setDT(GetTraitSpecificData(dfEcologyTraits, 10))
-# Collect any new species from dfStream.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfStreams, dfMasterSpecies)
 
 # TRAIT: Lakes.
 # Filtering for presence of type of lake data. This is for the univariate analyses section.
 # TEST 1: Does trait have data for at least 500 species?
 # Answer: Yes!
 dfLakes <- setDT(GetTraitSpecificData(dfEcologyTraits, 11))
-# Collect any new species from dfLake.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfLakes, dfMasterSpecies)
 
 # TRAIT: Schooling.
 # Filtering for presence of trait data. 
 # TEST 1: Does trait have data for at least 500 species?
 # Answer: Yes!
 dfSchooling <- setDT(GetTraitSpecificData(dfEcologyTraits, 16))
-# Collect any new species.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfSchooling, dfMasterSpecies)
 
 # TRAIT: Benthic.
 # Filtering for presence of trait data. 
 # TEST 1: Does trait have data for at least 500 species?
 # Answer: Yes!
 dfBenthic <- setDT(GetTraitSpecificData(dfEcologyTraits, 17))
-# Collect any new species.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfBenthic, dfMasterSpecies)
 
 # TRAIT: SoftBottom.
 # Filtering for presence of trait data. 
 # TEST 1: Does trait have data for at least 500 species?
 # Answer: Yes!
 dfSoftBottom <- setDT(GetTraitSpecificData(dfEcologyTraits, 18))
-# Collect any new species.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfSoftBottom, dfMasterSpecies)
 
 # TRAIT: Sand.
 # Filtering for presence of trait data. 
 # TEST 1: Does trait have data for at least 500 species?
 # Answer: Yes!
 dfSand <- setDT(GetTraitSpecificData(dfEcologyTraits, 19))
-# Collect any new species.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfSand, dfMasterSpecies)
 
 # TRAIT: Silt.
 # Filtering for presence of trait data. 
 # TEST 1: Does trait have data for at least 500 species?
 # Answer: Yes!
 dfSilt <- setDT(GetTraitSpecificData(dfEcologyTraits, 20))
-# Collect any new species.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfSilt, dfMasterSpecies)
 
 # TRAIT: Mud.
 # Filtering for presence of trait data. 
 # TEST 1: Does trait have data for at least 500 species?
 # Answer: Yes!
 dfMud <- setDT(GetTraitSpecificData(dfEcologyTraits, 21))
-# Collect any new species.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfMud, dfMasterSpecies)
 
 # TRAIT: HardBottom.
 # Filtering for presence of trait data. 
 # TEST 1: Does trait have data for at least 500 species?
 # Answer: Yes!
 dfHardBottom <- setDT(GetTraitSpecificData(dfEcologyTraits, 22))
-# Collect any new species.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfHardBottom, dfMasterSpecies)
 
 # TRAIT: Rocky.
 # Filtering for presence of trait data. 
 # TEST 1: Does trait have data for at least 500 species?
 # Answer: Yes!
 dfRocky <- setDT(GetTraitSpecificData(dfEcologyTraits, 23))
-# Collect any new species.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfRocky, dfMasterSpecies)
 
 # TRAIT: Rubble.
 # Filtering for presence of trait data. 
 # TEST 1: Does trait have data for at least 500 species?
 # Answer: Yes!
 dfRubble <- setDT(GetTraitSpecificData(dfEcologyTraits, 24))
-# Collect any new species.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfRubble, dfMasterSpecies)
 
 # TRAIT: Macrophyte.
 # Filtering for presence of trait data. 
 # TEST 1: Does trait have data for at least 500 species?
 # Answer: Yes!
 dfMacrophyte <- setDT(GetTraitSpecificData(dfEcologyTraits, 25))
-# Collect any new species.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfMacrophyte, dfMasterSpecies)
 
 # TRAIT: SeaGrassBeds.
 # Filtering for presence of trait data. 
 # TEST 1: Does trait have data for at least 500 species?
 # Answer: Yes!
 dfSeaGrassBeds <- setDT(GetTraitSpecificData(dfEcologyTraits, 26))
-# Collect any new species.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfSeaGrassBeds, dfMasterSpecies)
 
 # TRAIT: CoralReefs.
 # Filtering for presence of trait data. 
 # TEST 1: Does trait have data for at least 500 species?
 # Answer: Yes!
 dfCoralReefs <- setDT(GetTraitSpecificData(dfEcologyTraits, 27))
-# Collect any new species.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfCoralReefs, dfMasterSpecies)
 
 # Non-binary traits.
 # TRAIT: Herbivory2.
@@ -1092,8 +1043,6 @@ dfHerbivory <- setDT(GetTraitSpecificData(dfEcologyTraits, 12))
 # TEST 2: Does the trait have enough data variation?
 # Answer: Yes!
 table(dfHerbivory$Herbivory2)
-# Collect any new species from dfHerbivory.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfHerbivory, dfMasterSpecies)
 
 # TRAIT: Feeding Type.
 # Filtering for presence of type of feeding type data. This is for the univariate analyses section.
@@ -1113,8 +1062,6 @@ rareVars <- which(dfFeedingType$FeedingType == "feeding on a host (parasite)" |
 dfFeedingType <- dfFeedingType[-rareVars, ]
 # Also dropping these levels from the factor.
 dfFeedingType$FeedingType <- droplevels(dfFeedingType$FeedingType)
-# Collect any new species from dfFeedingType.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfFeedingType, dfMasterSpecies)
 
 
 # Continuous traits.
@@ -1125,8 +1072,6 @@ dfMasterSpecies <- AppendToMasterSpeciesDf(dfFeedingType, dfMasterSpecies)
 dfDietTroph <- setDT(GetTraitSpecificData(dfEcologyTraits, 14))
 # TEST 2: Does the trait have enough data variation?
 hist(dfDietTroph$DietTroph)
-# Collect any new species from dfDietTroph.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfDietTroph, dfMasterSpecies)
 
 # TRAIT: Food Troph.
 # Filtering for presence of type of diet troph data. This is for the univariate analyses section.
@@ -1135,13 +1080,10 @@ dfMasterSpecies <- AppendToMasterSpeciesDf(dfDietTroph, dfMasterSpecies)
 dfFoodTroph <- setDT(GetTraitSpecificData(dfEcologyTraits, 15))
 # TEST 2: Does the trait have enough data variation?
 hist(dfFoodTroph$FoodTroph)
-# Collect any new species from dfFoodTroph.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfFoodTroph, dfMasterSpecies)
 
 # Finally, prepare the dfEcologyMV datatable by merging all univariate datatables.
 dfEcologyMV <- merge(dfNeritic, dfIntertidal, by = "species_name")
 dfEcologyMV <- merge(dfEcologyMV, dfOceanic, by = "species_name")
-dfEcologyMV <- merge(dfEcologyMV, dfEpipegalic, by = "species_name")
 dfEcologyMV <- merge(dfEcologyMV, dfEpipegalic, by = "species_name")
 dfEcologyMV <- merge(dfEcologyMV, dfMesopelagic, by = "species_name")
 dfEcologyMV <- merge(dfEcologyMV, dfBathypelagic, by = "species_name")
@@ -1207,8 +1149,6 @@ rareVars <- which(dfIntroReason$reason == "fill ecological niche" |
 dfIntroReason <- dfIntroReason[-rareVars, ]
 # Also dropping these levels from the factor.
 dfIntroReason$reason <- droplevels(dfIntroReason$reason)
-# Collect any new species.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfIntroReason, dfMasterSpecies)
 
 # Special cases.
 # TRAIT: Established in the wild.
@@ -1237,8 +1177,6 @@ table(dfEstabWild$estab_wild_YN)
 # Recode trait for regression analyses.
 # Change the data to factor type.
 dfEstabWild[, estab_wild_YN := as.factor(estab_wild_YN)]
-# Collect any new species.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfEstabWild, dfMasterSpecies)
 
 
 # TRAIT: Established in aquaculture.
@@ -1267,9 +1205,6 @@ table(dfEstabAqua$estab_aqua_YN)
 # Recode trait for regression analyses.
 # Change the data to factor type.
 dfEstabAqua[, estab_aqua_YN := as.factor(estab_aqua_YN)]
-# Collect any new species.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfEstabAqua, dfMasterSpecies)
-
 
 # TRAIT: Invasive.
 # If the species is invasive anywhere.
@@ -1297,8 +1232,6 @@ table(dfInvasive$invasive_YN)
 # Recode trait for regression analyses.
 # Change the data to factor type.
 dfInvasive[, invasive_YN := as.factor(invasive_YN)]
-# Collect any new species.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfInvasive, dfMasterSpecies)
 
 # Finally, prepare the dfIntroductionMV datatable by merging all univariate datatables.
 dfIntroductionMV <- merge(dfIntroReason, dfEstabWild, all.y = TRUE, by = "species_name")
@@ -1329,8 +1262,6 @@ dfTroph <- setDT(GetTraitSpecificData(dfTroph, 2))
 # TEST 2: Does the trait have enough data variation?
 # Answer: Looks good.
 hist(dfTroph$troph)
-# Collect any new species from dfAvgDepth.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfTroph, dfMasterSpecies)
 
 # Mode trait(s).
 # TRAIT: Diet.
@@ -1355,8 +1286,6 @@ rareVars <- which(dfDiet$diet == "detritus" | dfDiet$diet == "others")
 dfDiet <- dfDiet[-rareVars, ]
 # Also dropping these levels from the factor.
 dfDiet$diet <- droplevels(dfDiet$diet)
-# Collect any new species.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfDiet, dfMasterSpecies)
 
 # Finally, prepare the dfDietMV datatable by merging all univariate datatables.
 dfDietMV <- merge(dfTroph, dfDiet, all.x = TRUE, by = "species_name")
@@ -1381,12 +1310,13 @@ dfAgeMaturity <- dfMaturityTraits[, age_at_maturity := as.double(age_at_maturity
 dfAgeMaturity[, age_at_maturity := median(age_at_maturity, na.rm = TRUE), keyby = species_name]
 # Filtering for presence of average depth data. This is for the univariate analyses section.
 # 500 SPECIES TEST: 374 but keeping because interesting trait.
-dfAgeMaturity <- setDT(GetTraitSpecificData(dfAgeMaturity, 5))
+dfAgeMaturity <- setDT(GetTraitSpecificData(dfAgeMaturity, 3))
 # TEST 2: Does the trait have enough data variation?
 # Answer: Skewed.
 hist(dfAgeMaturity$age_at_maturity)
-# Collect any new species.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfAgeMaturity, dfMasterSpecies)
+
+# Only one maturity trait currently unless we use sex as control variable.
+dfMaturityMV <- dfAgeMaturity 
 
 
 # Reproduction.
@@ -1397,13 +1327,12 @@ dfReproduction <- fread("reproduction_information.csv")
 # Datatable reorganization and renaming. Renaming column names to keep variable
 # syntax consistent throughout the pipeline.
 dfReproTraits <- dfReproduction[, .(species_name = sciname, repro_mode = ReproMode, 
-                                    fertilization = Fertilization, mating_system = MatingSystem,
-                                    rep_guild_1 = RepGuild1, rep_guild_2 = RepGuild2, 
-                                    parental_care = ParentalCare)]
+                                    fertilization = Fertilization, rep_guild_1 = RepGuild1, 
+                                    rep_guild_2 = RepGuild2, parental_care = ParentalCare)]
 # Unlikely to vary within species.
 dfReproTraits <- dfReproTraits[!duplicated(dfReproTraits$species_name), ]
 # First, change all of the traits to factor type.
-changeVars <- c(2:7)
+changeVars <- c(2:6)
 dfReproTraits[, (changeVars) := lapply(.SD, as.factor), .SDcols = changeVars]
 
 
@@ -1419,8 +1348,6 @@ rareVars <- which(dfReproMode$repro_mode == "true hermaphroditism")
 dfReproMode <- dfReproMode[-rareVars, ]
 # Also dropping these levels from the factor.
 dfReproMode$repro_mode <- droplevels(dfReproMode$repro_mode)
-# Collect any new species.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfReproMode, dfMasterSpecies)
 
 # TRAIT: Fertilization.
 # Filtering for presence of trait data. This is for the univariate analyses section.
@@ -1434,36 +1361,21 @@ rareVars <- which(dfFert$fertilization == "in mouth" | dfFert$fertilization == "
 dfFert <- dfFert[-rareVars, ]
 # Also dropping these levels from the factor.
 dfFert$fertilization <- droplevels(dfFert$fertilization)
-# Collect any new species.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfFert, dfMasterSpecies)
-
-# TRAIT: Mating system.
-# Filtering for presence of trait data. This is for the univariate analyses section.
-# TEST 1: Does trait have data for at least 500 species?
-# Answer: No but an interesting trait.
-dfMatingSystem <- setDT(GetTraitSpecificData(dfReproTraits, 4))
-# TEST 2: Does the trait have enough data variation?
-# Answer: A couple rare categories will be removed.
-table(dfMatingSystem$mating_system)
-# Collect any new species.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfMatingSystem, dfMasterSpecies)
 
 # TRAIT: Rep Guild 1.
 # Filtering for presence of trait data. This is for the univariate analyses section.
 # TEST 1: Does trait have data for at least 500 species?
 # Answer: Yes!
-dfRepGuild1 <- setDT(GetTraitSpecificData(dfReproTraits, 5))
+dfRepGuild1 <- setDT(GetTraitSpecificData(dfReproTraits, 4))
 # TEST 2: Does the trait have enough data variation?
 # Answer: Looks good.
 table(dfRepGuild1$rep_guild_1)
-# Collect any new species.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfRepGuild1, dfMasterSpecies)
 
 # TRAIT: Rep Guild 2.
 # Filtering for presence of trait data. This is for the univariate analyses section.
 # TEST 1: Does trait have data for at least 500 species?
 # Answer: Yes!
-dfRepGuild2 <- setDT(GetTraitSpecificData(dfReproTraits, 6))
+dfRepGuild2 <- setDT(GetTraitSpecificData(dfReproTraits, 5))
 # Revalue the category names so the syntax is consistent (i.e. "Polar" should be "polar").
 dfRepGuild2[, rep_guild_2 := revalue(rep_guild_2, c("Brood hiders" = "brood hiders", 
                                                     "Clutch tenders" = "clutch tenders",
@@ -1473,19 +1385,21 @@ dfRepGuild2[, rep_guild_2 := revalue(rep_guild_2, c("Brood hiders" = "brood hide
 # TEST 2: Does the trait have enough data variation?
 # Answer: Yes.
 table(dfRepGuild2$rep_guild_2)
-# Collect any new species.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfRepGuild2, dfMasterSpecies)
 
 # TRAIT: Parental care.
 # Filtering for presence of trait data. This is for the univariate analyses section.
 # TEST 1: Does trait have data for at least 500 species?
 # Answer: Yes!
-dfParentalCare <- setDT(GetTraitSpecificData(dfReproTraits, 7))
+dfParentalCare <- setDT(GetTraitSpecificData(dfReproTraits, 6))
 # TEST 2: Does the trait have enough data variation?
 # Answer: Yes.
 table(dfParentalCare$parental_care)
-# Collect any new species.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfParentalCare, dfMasterSpecies)
+
+# Finally, prepare the dfReproductionMV datatable by merging all univariate datatables.
+dfReproductionMV <- merge(dfReproMode, dfFert, all.x = TRUE, by = "species_name")
+dfReproductionMV <- merge(dfReproductionMV, dfRepGuild1, all.x = TRUE, by = "species_name")
+dfReproductionMV <- merge(dfReproductionMV, dfRepGuild2, all.x = TRUE, by = "species_name")
+dfReproductionMV <- merge(dfReproductionMV, dfParentalCare, all.x = TRUE, by = "species_name")
 
 
 ### MORPHOMETRIC RELATED ###
@@ -1511,8 +1425,6 @@ dfMaxWeight <- setDT(GetTraitSpecificData(dfMaxWeight, 2))
 # TEST 2: Does the trait have enough data variation?
 # Answer: Skewed.
 hist(dfMaxWeight$weight_max)
-# Collect any new species.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfMaxWeight, dfMasterSpecies)
 
 # TRAIT: Maximum age.
 # The column must first be converted to double (numeric) type.
@@ -1525,45 +1437,58 @@ dfMaxAge <- setDT(GetTraitSpecificData(dfMaxAge, 3))
 # TEST 2: Does the trait have enough data variation?
 # Answer: Skewed.
 hist(dfMaxAge$age_max)
-# Collect any new species.
-dfMasterSpecies <- AppendToMasterSpeciesDf(dfMaxAge, dfMasterSpecies)
 
-
+# Finally, prepare the dfReproductionMV datatable by merging all univariate datatables.
+dfPopCharMV <- merge(dfMaxWeight, dfMaxAge, all.y = TRUE, by = "species_name")
 
 
 
 ### PHYSIOLOGY RELATED ###
-# Oxygen.
-#dfOxygen <- data.frame(oxygen(speciesNames))
-#write.csv(dfOxygen, file = "oxygen_information.csv") 
-# Read in the oxygen information.
-dfOxygen <- fread("oxygen_information.csv")
-
-# Weight, Temp, Oxygen, Oxygenmgl, OxygenCons, MetabolicLevel
-# LEFT OFF HERE!
-
-
-# Speed.
-#dfSpeed <- data.frame(speed(speciesNames))
-#write.csv(dfSpeed, file = "speed_information.csv") 
-# Read in the speed information.
-dfSpeed <- fread("speed_information.csv")
-colnames(dfSpeed)[4] <- "species_name"
-# Speedms, Mode
-# Not sure how to treat mode here.
-
-
 # Swimming.
-dfSwimming <- data.frame(swimming(speciesNames))
-write.csv(dfSwimming, file = "swimming_information.csv") 
+#dfSwimming <- data.frame(swimming(speciesNames))
+#write.csv(dfSwimming, file = "swimming_information.csv") 
 # Read in the swimming information.
 dfSwimming <- fread("swimming_information.csv")
-colnames(dfSwimming)[2] <- "species_name"
+# Datatable reorganization and renaming. Renaming column names to keep variable
+# syntax consistent throughout the pipeline.
+dfSwimmingTraits <- dfSwimming[, .(species_name = sciname, adult_type = AdultType, 
+                                    adult_mode = AdultMode)]
+# First, change all of the traits to factor type.
+changeVars <- c(2:3)
+dfSwimmingTraits[, (changeVars) := lapply(.SD, as.factor), .SDcols = changeVars]
 
-# AdultType, AdultMode
+# TRAIT: Adult Type.
+# Filtering for presence of trait data. This is for the univariate analyses section.
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes!
+dfSwimmingType <- setDT(GetTraitSpecificData(dfSwimmingTraits, 2))
+# TEST 2: Does the trait have enough data variation?
+# Answer: One rare category.
+table(dfSwimmingType$adult_type)
+rareVars <- which(dfSwimmingType$adult_type == "Undulation of median or pectoral fins")
+dfSwimmingType <- dfSwimmingType[-rareVars, ]
+# Also dropping these levels from the factor.
+dfSwimmingType$adult_type <- droplevels(dfSwimmingType$adult_type)
 
+# TRAIT: Adult Mode.
+# Filtering for presence of trait data. This is for the univariate analyses section.
+# TEST 1: Does trait have data for at least 500 species?
+# Answer: Yes!
+dfSwimmingMode <- setDT(GetTraitSpecificData(dfSwimmingTraits, 3))
+# Revalue the category names so the syntax is consistent (i.e. "Polar" should be "polar").
+dfSwimmingMode[, adult_mode := revalue(adult_mode, c("Balistiform" = "balistiform", 
+                                                     "Subcarangiform" = "subcarangiform"))]
+# TEST 2: Does the trait have enough data variation?
+# Answer: Several rare categories.
+table(dfSwimmingMode$adult_mode)
+rareVars <- which(dfSwimmingMode$adult_mode == "Bathypteroiform" | 
+                  dfSwimmingMode$adult_mode == "tetraodontiform")
+dfSwimmingMode <- dfSwimmingMode[-rareVars, ]
+# Also dropping these levels from the factor.
+dfSwimmingMode$adult_mode <- droplevels(dfSwimmingMode$adult_mode)
 
-
+# Finally, prepare the dfSwimmingMV datatable by merging all univariate datatables.
+dfSwimmingMV <- merge(dfSwimmingType, dfSwimmingMode, all.x = TRUE, by = "species_name")
 
 
 # Construction of dfTraits datatable.
@@ -1573,21 +1498,25 @@ colnames(dfSwimming)[2] <- "species_name"
 # I only want a single row per BIN for this merging process.
 dfFilteredSingle <- dfFiltered[!duplicated(dfFiltered$bin_uri), ]
 # Let's take the columns we need to construct the dfTraits datatable.
-dfFilteredSingle <- dfFilteredSingle[, .(bin_uri, species_label, median_lat, lat_range, 
-                                         initial_bin_size, filtered_bin_size)]
-# Merge dfFiltered with dfEcosystemTraits to create dfTraits.
-dfTraits <- merge(dfFilteredSingle, dfEcosystemTraits, by.x = "species_label", 
-                  by.y = "species_name", all.x = TRUE)
-rm(dfFilteredSingle)
-# Merge dfTraits with dfMorphometricTraits.
-dfTraits <- merge(dfTraits, dfMorphometricTraits, by.x = "species_label", 
-                  by.y = "species_name", all.x = TRUE)
-# Merge dfTraits with dfMorphologyTraits.
-dfTraits <- merge(dfTraits, dfMorphologyTraits, by.x = "species_label", 
-                  by.y = "species_name", all.x = TRUE)
-# Merge dfTraits with dfEcologyTraits.
-dfTraits <- merge(dfTraits, dfEcologyTraits, by.x = "species_label", 
-                  by.y = "species_name", all.x = TRUE)
+dfFilteredSingle <- dfFilteredSingle[, .(bin_uri, species_name, initial_bin_size, filtered_bin_size)]
+# Now merge to all of the trait MV datatables.
+dfTraits <- merge(dfFilteredSingle, dfLatitudeMV, by = "bin_uri")
+# Dataframe reorganization.
+dfTraits <- dfTraits[, c(1:4, 6, 8)]
+# Merge the FishBase traits.
+dfTraits <- merge(dfTraits, dfEcosystemMV, all = TRUE, by = "species_name")
+dfTraits <- merge(dfTraits, dfEcologyMV, all = TRUE, by = "species_name")
+dfTraits <- merge(dfTraits, dfIntroductionMV, all = TRUE, by = "species_name")
+dfTraits <- merge(dfTraits, dfReproductionMV, all = TRUE, by = "species_name")
+dfTraits <- merge(dfTraits, dfSwimmingMV, all = TRUE, by = "species_name")
+dfTraits <- merge(dfTraits, dfMaturityMV, all = TRUE, by = "species_name")
+dfTraits <- merge(dfTraits, dfPopCharMV, all = TRUE, by = "species_name")
+dfTraits <- merge(dfTraits, dfMorphologyMV, all = TRUE, by = "species_name")
+dfTraits <- merge(dfTraits, dfMorphometricMV, all = TRUE, by = "species_name")
+
+# Collect the species names needed for the master phylogeny.
+dfMasterSpecies <- as.data.frame(unique(dfTraits$species_name))
+colnames(dfMasterSpecies)[1] <- "species_name"
 
 ### COMPLETE CASES ###
 # Let's try to maximize the amount of complete cases in our dataset (species that have no missing data). #
@@ -1603,10 +1532,10 @@ dfTraits <- dfTraits[order(count), ]
 dfTraits[, count := NULL]
 # Removing the first three columns and creating a new datatable called dfTemp. 
 # These columns do not need to be considered in the complete cases as I am only looking at traits.
-dfTemp <- dfTraits[, 3:123]
+dfTemp <- dfTraits[, 3:66]
 
 # Write the trait data in order to completeness to file
-#write.csv(dfTraits, file = "TraitDataCompleteness.csv")
+write.csv(dfTraits, file = "TraitDataCompleteness.csv")
 
 # The datatable is now sorted: columns with the least amount of NAs to the left, 
 # rows with with the least amount of NAs on top.
@@ -1644,27 +1573,25 @@ for (i in 1:len) {
 names(all.cc) <- rev(colnames(dfTemp))
 # Look at the results.
 all.cc
-# fork_length seems like a good cutoff point.
-which(colnames(dfTraits) == "fork_length")
-dfTraits <- dfTraits[, 1:109] 
+# rep_guild_2 seems like a good cutoff point.
+which(colnames(dfTraits) == "rep_guild_2")
+dfTraits <- dfTraits[, 1:52] 
 # Finally, filter the original dfTraits datatable so only complete cases are kept.
 dfCompleteCases <- dfTraits %>% filter(complete.cases(.))
 
 # Removal of near zero variance traits. These are traits that are invariant and 
 # that wouldn't contribute anything to the multivariate analysis.
-dfCompleteCases <- dfCompleteCases[, -nearZeroVar(dfCompleteCases)]
+dfCompleteCases <- dfCompleteCases[, -nearZeroVar(dfCompleteCases, freqCut = 99/1)]
 
 # Merge back to dfFiltered to obtain all of the sequence information for each BIN.
 dfPreCentroid <- merge(dfFiltered, dfCompleteCases, by = "bin_uri")
 rm(dfFiltered)
 rm(dfCompleteCases)
 # Dataframe reorganization and renaming.
+colnames(dfPreCentroid)[4] <- "species_name"
 colnames(dfPreCentroid)[6] <- "initial_bin_size"
-colnames(dfPreCentroid)[8] <- "median_lat"
-colnames(dfPreCentroid)[9] <- "lat_range"
-colnames(dfPreCentroid)[11] <- "species_name"
-colnames(dfPreCentroid)[12] <- "filtered_bin_size"
-dfPreCentroid <- dfPreCentroid[, c(1:3, 11, 6, 12, 7:9, 18:46)]
+colnames(dfPreCentroid)[7] <- "filtered_bin_size"
+dfPreCentroid <- dfPreCentroid[, c(1:7, 11:57)]
 
 
 ### SECTION 3: CENTROID SEQUENCE DETERMINATION ###

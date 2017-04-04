@@ -7,7 +7,7 @@
 # Advisors: Dr. Sarah J. Adamowicz and Dr. Zeny Feng.
 # Acknowlegements: Matt Orton for filtering steps/centroid sequence 
 # determination/reference sequence trimming (lines TBD).
-# Last version saved: Mar 8th 2017 (R_Pipeline_PHYLO_V7_Feb25th.R)
+# Last version saved: Apr 2nd 2017 (R_Pipeline_PHYLO_V7_Mar24th.R)
 
 ### PACKAGES REQUIRED ###
 
@@ -257,16 +257,16 @@ dfResolve <- merge(dfResolve, dfNumberOfSpecies, by = "bin_uri")
 # Checking these manually.
 orderConflicts <- dfResolve[, which(number_of_orders > 1), by = bin_uri]
 orderConflicts <- unique(orderConflicts$bin_uri)
-# BOLD:AAB0176 removing deviant seq from different order: 7498186
+# BOLD:AAB0176 removing 1 deviant seq from different order.
 which(dfResolve$recordID == 7498186)
 dfResolve <- dfResolve[-14878, ]
-# BOLD:AAB3875 removing deviant seq from different order: 7498304
+# BOLD:AAB3875 removing 1 deviant seq from different order.
 which(dfResolve$recordID == 7498304)
 dfResolve <- dfResolve[-21309, ]
 # BOLD:AAI6339 removing deviant seq from different order: 2950231
 which(dfResolve$recordID == 2950231)
 dfResolve <- dfResolve[-61813, ]
-# Removing ADE3647. Not enough sequences (4).
+# Removing BOLD:ADE3647. Not enough sequences (4).
 rmThese <- which(dfResolve$bin_uri == "ADE3647")
 dfResolve <- dfResolve[-rmThese, ]
 rm(orderConflicts)
@@ -280,22 +280,25 @@ familyConflicts <- unique(familyConflicts$bin_uri)
 # Removing AAB2488. Not enough sequences.
 rmThese <- which(dfResolve$bin_uri == "AAB2488")
 dfResolve <- dfResolve[-rmThese, ]
-# Removing BOLD:AAB4315. A lot of conflict, no clear majority.
+# Removing BOLD:AAB4315. No clear majority.
 rmThese <- which(dfResolve$bin_uri == "AAB4315")
 dfResolve <- dfResolve[-rmThese, ]
-# Removing AAB4318. Not enough sequences.
+# Removing BOLD:AAB4318. Not enough sequences.
 rmThese <- which(dfResolve$bin_uri == "AAB4318")
 dfResolve <- dfResolve[-rmThese, ]
-# BOLD:AAB5416 removing deviant seq from different family
+# BOLD:AAB5416 removing 1 deviant seq from different family.
 which(dfResolve$recordID == 718811)
 dfResolve <- dfResolve[-23906, ]
-# BOLD:AAB5825 not enough consensus.
+# Removing BOLD:AAB5825: less than 80% consensus.
 rmThese <- which(dfResolve$bin_uri == "AAB5825")
 dfResolve <- dfResolve[-rmThese, ]
-# Removing AAB5842. Not enough sequences.
+# Removing BOLD:AAB5827: not enough sequences.
+rmThese <- which(dfResolve$bin_uri == "AAB5827")
+dfResolve <- dfResolve[-rmThese, ]
+# Removing BOLD:AAB5842. Less than 80% consensus.
 rmThese <- which(dfResolve$bin_uri == "AAB5842")
 dfResolve <- dfResolve[-rmThese, ]
-# BOLD:AAB6419 removing deviant seq from different family
+# BOLD:AAB6419 removing deviant seq from different family.
 which(dfResolve$recordID == 553287)
 dfResolve <- dfResolve[-26182, ]
 # BOLD:AAC1457 removing deviant seq from different family
@@ -304,106 +307,122 @@ dfResolve <- dfResolve[-34706, ]
 # BOLD:AAC4093 removing deviant seqS from different families.
 rmThese <- which(dfResolve$recordID == 803396 | dfResolve$recordID == 803397)
 dfResolve <- dfResolve[-rmThese, ]
-# Removing AAD1426. Not enough sequences.
+# Removing BOLD:AAD1426. Not enough sequences.
 rmThese <- which(dfResolve$bin_uri == "AAD1426")
 dfResolve <- dfResolve[-rmThese, ]
-# Removing AAD4188. Not enough sequences.
+# Removing BOLD:AAD4188. Not enough sequences.
 rmThese <- which(dfResolve$bin_uri == "AAD4188")
 dfResolve <- dfResolve[-rmThese, ]
-# Removing AAD8781. Much uncertainty.
+# Removing BOLD:AAD8781. Much uncertainty, even on BIN page.
 rmThese <- which(dfResolve$bin_uri == "AAD8781")
 dfResolve <- dfResolve[-rmThese, ]
-# BOLD:AAD9212 removing deviant seqS from different families.
-rmThese <- which(dfResolve$recordID == 3020192)
+# Removing BOLD:AAD9212. Too much missing data.
+rmThese <- which(dfResolve$bin_uri == "AAD9212")
 dfResolve <- dfResolve[-rmThese, ]
-# BOLD:AAE0699 removing deviant seqS from different families.
-rmThese <- which(dfResolve$recordID == 2479339)
+# Removing BOLD:AAE0699. Too much missing data.
+rmThese <- which(dfResolve$bin_uri == "AAE0699")
 dfResolve <- dfResolve[-rmThese, ]
-# Removing AAE6275. Not enough sequences.
+# Removing BOLD:AAE6275. Not enough sequences.
 rmThese <- which(dfResolve$bin_uri == "AAE6275")
 dfResolve <- dfResolve[-rmThese, ]
-# Removing AAF3989. Not enough sequences.
+# Removing BOLD:AAF3989. Not enough sequences.
 rmThese <- which(dfResolve$bin_uri == "AAF3989")
 dfResolve <- dfResolve[-rmThese, ]
-# Removing AAO9420. Not enough sequences.
+# Removing BOLD:AAO9420. Not enough sequences.
 rmThese <- which(dfResolve$bin_uri == "AAO9420")
 dfResolve <- dfResolve[-rmThese, ]
-# Removing ABX1827. Not enough sequences.
+# Removing BOLD:ABX1827. Not enough sequences.
 rmThese <- which(dfResolve$bin_uri == "ABX1827")
 dfResolve <- dfResolve[-rmThese, ]
 rm(familyConflicts)
 
-# Genus level resolving.
-# Checking these manually.
-# At least 10+ records and 80% consistency.
-genusConflicts <- dfResolve[, which(number_of_genus > 1), by = bin_uri]
-genusConflicts <- unique(genusConflicts$bin_uri)
-
-
-
-
-
-
-
 ################################################################################
 ### TRAIT: POST FILTER BIN SIZE ###
 # Determine how many sequences are in a BIN in total after sequence filtering.
-dfFiltered[, filtered_bin_size := length(recordID), by = bin_uri]
+# Important for resolving genus/species level conflicts.
+dfResolve[, filtered_bin_size := length(recordID), by = bin_uri]
 ################################################################################
-dfNumberOfSpecies <- dfSpecies[, .(number_of_species = length(unique(species_name))), keyby = bin_uri]
 
-dfNumberOfGenus <- dfSpecies[, .(number_of_genus = length(unique(genus_name))), keyby = bin_uri]
+# Genus level resolving.
+# At least 10+ records and 80% consistency.
+genusConflicts <- dfResolve[, which(number_of_genus > 1), by = bin_uri]
+genusConflictBins <- unique(genusConflicts$bin_uri)
+# Create a new datatable for BINs with genus level conflicts.
+dtGenus <- dfResolve[genusConflictBins, ]
+dtGenus10 <- dtGenus[which(filtered_bin_size > 10)]
+# Now we must determine the most common genus and if it has at least 80% consistency.
+containSpecies <- dtGenus10[, grep("[A-Z]", genus_name)]
+# Create a new datatable containing only sequences baring species-level identification. 
+# This is necessary because NA values are considered when counting categories.
+dtGenus10 <- dtGenus10[containSpecies, ]
+# A count column is created to count the number of rows per genus per BIN.
+dtGenus10[, count := .N, by = .(bin_uri, genus_name)]
+# Majority genus percentage.
+dtGenus10[, genus_percentage := .(count / filtered_bin_size)]
+# The genus with the majority of entries.
+dtGenus10[order(-count), majority_genus := genus_name[1L], by = bin_uri]
+# Reorder to take a closer look.
+dtGenus10 <- dtGenus10[, .(bin_uri, genus_name, majority_genus, filtered_bin_size, count, genus_percentage)]
+# Make a column for majority species percentage to test if it is over 80.
+# The genus with the majority of entries.
+dtGenus10[order(-genus_percentage), majority_genus_percentage := genus_percentage[1L], by = bin_uri]
+dtAcceptedGenus <- dtGenus10[which(majority_genus_percentage > 0.80)]
+# Find the UNACCEPTED conflicted bins and remove them from dfResolve.
+bad <- anti_join(genusConflicts, dtAcceptedGenus, by = "bin_uri")
+badBins <- unique(bad$bin_uri)
+dfResolve <- dfResolve[!dfResolve$bin_uri %in% badBins, ]
 
-
-
-
-# Family level conflicts.
-# Checking these manually.
-familyConflicts <- dfResolve[, which(number_of_families > 1), by = bin_uri]
-familyConflicts <- unique(familyConflicts$bin_uri)
-
-
-### FILTER 8 ###
-# Resolving BINs with taxonomic conflicts.
-badBins <- dfFiltered[, which(number_of_species > 1), by = bin_uri]
-badBinsNames <- unique(badBins$bin_uri)
-# Subset out these sequences to look at them if desired.
-badBins <- dfFiltered[badBinsNames, ]
-setkey(badBins, filtered_bin_size)
-badBinsToKeep <- badBins[filtered_bin_size > 10]
-
-
-
-
-
-
+# Species level resolving.
+# At least 10+ records and 80% consistency.
+speciesConflicts <- dfResolve[, which(number_of_species > 1), by = bin_uri]
+speciesConflictBins <- unique(speciesConflicts$bin_uri)
+# Create a new datatable for BINs with species level conflicts.
+dtSpecies <- dfResolve[speciesConflictBins, ]
+dtSpecies10 <- dtSpecies[which(filtered_bin_size > 10)]
+# Now we must determine the most common species and if it has at least 80% consistency.
+containSpecies <- dtSpecies10[, grep("[A-Z]", species_name)]
+# Create a new datatable containing only sequences baring species-level identification. 
+# This is necessary because NA values are considered when counting categories.
+dtSpecies10 <- dtSpecies10[containSpecies, ]
+# A count column is created to count the number of rows per species per BIN.
+dtSpecies10[, count := .N, by = .(bin_uri, species_name)]
+# Majority species percentage.
+dtSpecies10[, species_percentage := .(count / filtered_bin_size)]
+# The genus with the majority of entries.
+dtSpecies10[order(-count), majority_species := species_name[1L], by = bin_uri]
+# Reorder to take a closer look.
+dtSpecies10 <- dtSpecies10[, .(bin_uri, species_name, majority_species, filtered_bin_size, count, species_percentage)]
+# Make a column for majority species percentage to test if it is over 80.
+# The genus with the majority of entries.
+dtSpecies10[order(-species_percentage), majority_species_percentage := species_percentage[1L], by = bin_uri]
+dtAcceptedSpecies <- dtSpecies10[which(majority_species_percentage > 0.80)]
+# Find the UNACCEPTED conflicted bins and remove them from dfResolve.
+bad <- anti_join(speciesConflicts, dtAcceptedSpecies, by = "bin_uri")
+badBins <- unique(bad$bin_uri)
+dfResolve <- dfResolve[!dfResolve$bin_uri %in% badBins, ]
 
 
 # Determine the most common species in each BIN (this can be used later down the
 # road to deal with BINs with sequences from more than one species). Now, it's 
 # just used to assign a species_label to sequences that have no species 
 # information (giving them a "name"!).
-# Note: The following line is an example of chaining. First the number of
-# observations grouped by bin_uri and then by species_name is determined (.N),
-# then, the number of observations are ordered and the species name with the 
-# highest number of observations in each is selected.
+# Create a new datatable containing only sequences baring species-level identification. 
+# This is necessary because NA values are considered when counting the number of species.
+containSpecies <- dfResolve[, grep("[A-Z]", species_name)]
+dfSpecies <- dfResolve[containSpecies, ]
 dfSpeciesLabel <- dfSpecies[, .N, by = .(bin_uri, species_name)][order(-N), .(species_label = species_name[1L]), keyby = bin_uri]
 
 # MERGING DATATABLES.
 # Merge datatables containing BIN species information.
 # Note: bin_uri is the key for each of these datatables due to the use of "keyby" 
 # instead of just "by". This ultimately facilitates datatable merging.
-dfSpeciesInfo <- merge(dfNumberOfSpecies, dfSpeciesLabel)
+setkey(dfResolve, bin_uri)
+dfFiltered <- merge(dfResolve, dfSpeciesLabel)
 rm(dfNumberOfSpecies)
 rm(dfSpeciesLabel)
 rm(dfSpecies)
-# Merge dfSpeciesInfo with dfFiltered to obtain all of the relevant taxonomic information.
-setkey(dfFiltered, bin_uri)
-dfFiltered <- merge(dfFiltered, dfSpeciesInfo)
-rm(dfSpeciesInfo)
 
-
-
+# LEFT OFF HERE!
 
 ################################################################################
 ### TRAIT: MEDIAN LATITUDE/LATITUDINAL RANGE ###

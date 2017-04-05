@@ -412,17 +412,39 @@ containSpecies <- dfResolve[, grep("[A-Z]", species_name)]
 dfSpecies <- dfResolve[containSpecies, ]
 dfSpeciesLabel <- dfSpecies[, .N, by = .(bin_uri, species_name)][order(-N), .(species_label = species_name[1L]), keyby = bin_uri]
 
+# Genus label.
+containGenus <- dfResolve[, grep("[A-Z]", genus_name)]
+dfGenus <- dfResolve[containGenus, ]
+dfGenusLabel <- dfGenus[, .N, by = .(bin_uri, genus_name)][order(-N), .(genus_label = genus_name[1L]), keyby = bin_uri]
+
+# Family label.
+containFamily <- dfResolve[, grep("[A-Z]", family_name)]
+dfFamily <- dfResolve[containFamily, ]
+dfFamilyLabel <- dfFamily[, .N, by = .(bin_uri, family_name)][order(-N), .(family_label = family_name[1L]), keyby = bin_uri]
+
+# Order label.
+containOrder <- dfResolve[, grep("[A-Z]", order_name)]
+dfOrder <- dfResolve[containOrder, ]
+dfOrderLabel <- dfOrder[, .N, by = .(bin_uri, order_name)][order(-N), .(order_label = order_name[1L]), keyby = bin_uri]
+
+
 # MERGING DATATABLES.
 # Merge datatables containing BIN species information.
 # Note: bin_uri is the key for each of these datatables due to the use of "keyby" 
 # instead of just "by". This ultimately facilitates datatable merging.
 setkey(dfResolve, bin_uri)
 dfFiltered <- merge(dfResolve, dfSpeciesLabel)
+dfFiltered <- merge(dfFiltered, dfGenusLabel)
+dfFiltered <- merge(dfFiltered, dfFamilyLabel)
+dfFiltered <- merge(dfFiltered, dfOrderLabel)
+# Datatable reorganization.
+dfFiltered <- dfFiltered[, .(bin_uri, recordID, order_name, order_label, family_name, 
+                             family_label, genus_name, genus_label, species_name, 
+                             species_label, nucleotides, initial_bin_size,
+                             filtered_bin_size, lat)]
 rm(dfNumberOfSpecies)
 rm(dfSpeciesLabel)
 rm(dfSpecies)
-
-# LEFT OFF HERE!
 
 ################################################################################
 ### TRAIT: MEDIAN LATITUDE/LATITUDINAL RANGE ###
@@ -498,13 +520,16 @@ hist(dfLatRange$lat_range)
 # Finally, prepare the dfLatitudeMV datatable by merging all univariate datatables.
 # This datatable will be used for the eventual multivariate analysis.
 dfLatitudeMV <- merge(dfLatitude, dfLatRange, by = "bin_uri")
+dfLatitudeMV <- dfLatitudeMV[, .(bin_uri, median_lat, lat_range,
+                                 filtered_bin_size = filtered_bin_size.x)]
 
 
 ################################################################################
 
 # Datatable reorganization for dfFiltered.
-dfFiltered <- dfFiltered[, .(bin_uri, recordID, order_name, species_name = species_label, 
-                             nucleotides, initial_bin_size, filtered_bin_size)]
+dfFiltered <- dfFiltered[, .(bin_uri, recordID, order_name = order_label, family_name = family_label, 
+                             genus_name = genus_label, species_name = species_label, nucleotides, initial_bin_size, 
+                             filtered_bin_size)]
 
 ################################################################################
 ### SECTION 2: FISHBASE TRAITS ###
@@ -1426,7 +1451,8 @@ dfFilteredSingle <- dfFilteredSingle[, .(bin_uri, species_name, initial_bin_size
 # Now merge to all of the trait MV datatables.
 dfTraits <- merge(dfFilteredSingle, dfLatitudeMV, all = TRUE, by = "bin_uri")
 # Dataframe reorganization.
-dfTraits <- dfTraits[, c(1:4, 6, 8)]
+dfTraits <- dfTraits[, c(1:6)]
+colnames(dfTraits)[4] <- "filtered_bin_size"
 # Merge the FishBase traits.
 dfTraits <- merge(dfTraits, dfEcosystemMV, all = TRUE, by = "species_name")
 dfTraits <- merge(dfTraits, dfEcologyMV, all = TRUE, by = "species_name")
@@ -1454,7 +1480,7 @@ dfTraits <- dfTraits[order(count), ]
 dfTraits[, count := NULL]
 # Removing the first three columns and creating a new datatable called dfTemp. 
 # These columns do not need to be considered in the complete cases as I am only looking at traits.
-dfTemp <- dfTraits[, 3:56]
+dfTemp <- dfTraits[, 5:56]
 
 # Write the trait data in order to completeness to file
 #write.csv(dfTraits, file = "TraitData.csv")
@@ -1510,10 +1536,10 @@ dfMultivariateTraits <- dfCompleteCases[, -nearZeroVar(dfCompleteCases, freqCut 
 # For univariate tree, dfTraits here instead of dfMultivariateTraits.
 dfPreCentroid <- merge(dfFiltered, dfMultivariateTraits, by = "bin_uri")
 # Dataframe reorganization and renaming.
-colnames(dfPreCentroid)[4] <- "species_name"
-colnames(dfPreCentroid)[6] <- "initial_bin_size"
-colnames(dfPreCentroid)[7] <- "filtered_bin_size"
-dfPreCentroid <- dfPreCentroid[, c(1:7)]
+colnames(dfPreCentroid)[6] <- "species_name"
+colnames(dfPreCentroid)[8] <- "initial_bin_size"
+colnames(dfPreCentroid)[9] <- "filtered_bin_size"
+dfPreCentroid <- dfPreCentroid[, c(1:9)]
 
 # Make sure to add the outgroups back.
 dfOutgroups2 <- dfFiltered[which(dfFiltered$species_name == "Neoceratodus forsteri" |
@@ -1534,9 +1560,6 @@ largeBins <- which(dfPreCentroid$filtered_bin_size > 1)
 # If there is at least one BIN with more than one member, then a dataframe 
 # dfCentroidSeqs will be created with those BINs.
 if (length(largeBins) > 0) {
-  
-  # Remove gaps prior to aligning (when using DECIPHER)
-  #dfPreCentroid$nucleotides <- dfPreCentroid[, gsub("-", "", nucleotides)]
   
   # Subset out the larger BINs.
   dfCentroidSeqs <- dfPreCentroid[largeBins, ]
@@ -1628,8 +1651,6 @@ dup_majority_species <- which(duplicated(dfAllSeqs$species_name)) # Dealing with
 dfAllSeqs <- dfAllSeqs[-dup_majority_species,]
 
 
-# For testing purposes of refSeqTrim.
-#data <- dfAllSeqs
 
 ################################################################################
 # REFERENCE SEQUENCE TRIMMING #
@@ -1750,7 +1771,7 @@ refSeqTrim <- function(data) {
   alignmentOrder <- DNAStringSet3@ranges@NAMES
 
   # Order dfAllSeqs according to this.
-  data <- data[match(data$species_name, alignmentOrder), ]
+  data <- data[match(alignmentOrder, data$species_name), ]
 
   # Repopulate dfAllSeqs with the newly trimmed sequences instead of the raw 
   # sequences.
@@ -1762,6 +1783,7 @@ refSeqTrim <- function(data) {
 }
 
 dfAllSeqs <- refSeqTrim(dfAllSeqs)
+
 
 ### ALIGNMENT QUALITY CHECKING ###
 # Here, extremely gappy/ungappy sequences are removed. These sequences are assumed
@@ -1790,7 +1812,132 @@ dfExtreme <- dfAllSeqs[extremeBins, ]
 # If you decide to remove all from your data:
 dfAllSeqs <- dfAllSeqs[-extremeBins, ]
 # Align and trim again without the extreme BINs/sequences.
-dfAllSeqs <- refSeqTrim(dfAllSeqs)  # Check over sequences/alignment.
+dfAllSeqs <- refSeqTrim(dfAllSeqs)  # Check over sequences/alignment, make sure it is in correct reading frame.
+
+### NEAREST NEIGHBOUR CHECK ###
+# Remove centroid sequences whose nearest neighbours are in a different order or family.
+# Convert each alignment to DNAbin format.
+dnaBinNN <- DNAStringSet(dfAllSeqs$nucleotides)
+names(dnaBinNN) <- dfAllSeqs$bin_uri
+dnaBinNN <- as.DNAbin(dnaBinNN)
+# Then, we perform genetic distance determination with the TN93 model.
+geneticDistanceCentroid <- dist.dna(dnaBinNN, model = "TN93", as.matrix = TRUE, pairwise.deletion = TRUE)
+
+mean(geneticDistanceCentroid)
+median(geneticDistanceCentroid)
+range(geneticDistanceCentroid)
+sd(geneticDistanceCentroid)
+# IQR
+lowerq = quantile(geneticDistanceCentroid)[2]
+upperq = quantile(geneticDistanceCentroid)[4]
+iqr = upperq - lowerq
+mild.threshold.upper = (iqr * 1.5) + upperq
+mild.threshold.lower = lowerq - (iqr * 1.5)
+
+# Remove 0 values.
+geneticDistanceCentroid[geneticDistanceCentroid == 0] <- NA
+
+test <- as.data.frame(geneticDistanceCentroid)
+# Identify BINs with no relatives within range of divergence.
+x <- apply(test, MARGIN = 1, function(x) all(x > 0.306))
+x <- which(x == "FALSE")
+test2 <- test[-x, ]
+
+
+# The nearest neighbour can be determined from the distance matrix alone.
+# It is the sequence with minimum pairwise distance to the sequence in question.
+result <- t(sapply(seq(nrow(geneticDistanceCentroid)), function(i) {
+  j <- which.min(geneticDistanceCentroid[i,])
+  c(paste(rownames(geneticDistanceCentroid)[i], colnames(geneticDistanceCentroid)[j], sep='/'), geneticDistanceCentroid[i, j])
+}))
+
+require(reshape)
+result <- as.data.frame(result, stringsAsFactors = FALSE)
+result <- transform(result, V1 = colsplit(V1, split = "/", names = c('bin_uri', 'nearest_neighbour')))
+result$V2 <- as.numeric(result$V2)
+
+# Get family and order names of BINs and nearest neighbours.
+dfNN <- result$V1
+dfNN$distance <- result$V2
+bins <- as.character(dfNN$bin_uri)
+nn <- as.character(dfNN$nearest_neighbour)
+# Make dfs following these orders we can extract order and family names.
+bin_ord <- dfAllSeqs[match(dfNN$bin_uri, dfAllSeqs$bin_uri), ] 
+bin_orders <- bin_ord$order_name
+bin_families <- bin_ord$family_name
+nn_ord <- dfAllSeqs[match(dfNN$nearest_neighbour, dfAllSeqs$bin_uri), ] 
+nn_orders <- nn_ord$order_name
+nn_families <- nn_ord$family_name
+# Add these columns to the dfNN.
+dfNN$bin_order <- bin_orders
+dfNN$bin_family <- bin_families
+dfNN$nn_order <- nn_orders
+dfNN$nn_family <- nn_families
+dfNN <- setDT(dfNN)
+# Non matching orders.
+nonmatchOrd <- which(dfNN$bin_order != dfNN$nn_order)
+# LOook closely.
+dfNonmatchOrd <- dfNN[nonmatchOrd, ]
+#dfNonmatchOrd <- dfNonmatchOrd[which(distance < 0.05)]
+# Non matching fams.
+nonmatchFam <- which(dfNN$bin_family != dfNN$nn_family)
+# LOook closely.
+dfNonmatchFam <- dfNN[nonmatchFam, ]
+dfNonmatchFam <- dfNonmatchFam[which(distance < 0.05)]
+# No nearest neighbours under 0.05 distance in ord/fam conflicts.
+
+# Now check for any neighbours under 0.05 in different ord or fam.
+# Subset out all close neighbour pairings.
+dfGeneticDistance <- as.data.frame(geneticDistanceCentroid)
+closeNeighbours <- which(dfGeneticDistance < 0.05, arr.ind = TRUE)
+bins <- row.names(dfGeneticDistance[closeNeighbours[, 1],] )
+nn <- colnames(dfGeneticDistance[closeNeighbours[, 2]])
+closeNeighbours <- as.data.frame(bins)
+closeNeighbours$bins <- as.character(closeNeighbours$bins)
+closeNeighbours$neighbour <- nn
+# Get family and order names of BINs and nearest neighbours.
+# Make dfs following these orders we can extract order and family names.
+bin_ord <- dfAllSeqs[match(closeNeighbours$bins, dfAllSeqs$bin_uri), ] 
+bin_orders <- bin_ord$order_name
+bin_families <- bin_ord$family_name
+nn_ord <- dfAllSeqs[match(closeNeighbours$neighbour, dfAllSeqs$bin_uri), ] 
+nn_orders <- nn_ord$order_name
+nn_families <- nn_ord$family_name
+# Add these columns to the dfNN.
+closeNeighbours$bin_order <- bin_orders
+closeNeighbours$bin_family <- bin_families
+closeNeighbours$nn_order <- nn_orders
+closeNeighbours$nn_family <- nn_families
+closeNeighbours <- setDT(closeNeighbours)
+
+# Fill in missing data in bin columnn.
+# BINs columns.
+closeNeighbours <- closeNeighbours[order(closeNeighbours$bins), ]
+#install.packages("zoo")
+library(zoo)
+closeNeighbours$bin_order <- na.locf(closeNeighbours$bin_order)
+closeNeighbours$bin_family <- na.locf(closeNeighbours$bin_family)
+# NN columns.
+closeNeighbours <- closeNeighbours[order(closeNeighbours$neighbour), ]
+closeNeighbours$nn_order <- na.locf(closeNeighbours$nn_order)
+closeNeighbours$nn_family <- na.locf(closeNeighbours$nn_family)
+
+# Non matching orders.
+nonmatchOrd <- which(closeNeighbours$bin_order != closeNeighbours$nn_order)
+# LOook closely.
+#dfNonmatchOrd <- dfNN[nonmatchOrd, ]
+#dfNonmatchOrd <- dfNonmatchOrd[which(distance < 0.05)]
+# Non matching fams.
+nonmatchFam <- which(closeNeighbours$bin_family != closeNeighbours$nn_family)
+# LOook closely.
+#dfNonmatchFam <- neighbourConflicts[nonmatchFam, ]
+
+
+
+
+
+
+
 
 
 ### SECTION 4: WORKING PHYLOGENY ###

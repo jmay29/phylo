@@ -1797,28 +1797,32 @@ dfCheck4AllSeqs <- refSeqTrim(dfCheck3AllSeqs)  # Check over sequences/alignment
 
 
 # CHECK THAT ALIGNMENT AND dfCheck2AllSeqs are the same.
-x <- read.fasta(file="May11WithOutgroups.fas")
+x <- read.fasta(file="withNOoutgroupsMAY23rd.fas")
 fish <- names(x)
 fish <- gsub("_", " ", fish)
 
-dfFinalNames <- dfCheckAllSeqs[dfCheckAllSeqs$species_name %in% fish, ]
+dfNamesNoOG <- dfCheckAllSeqs[dfCheckAllSeqs$species_name %in% fish, ]
 
 # TREE SECTION! #
 # BINARY CONSTRAINT TREE PRUNING #
 # First, let's download the tree we are using as a topological constraint.
-#fishTree <- read.tree(file = "fishTree.tre")
+fishTree <- read.tree(file = "fishTree.tre")
 # Change the tip labels to just species names.
-#fishTree$tip.label <- gsub("_", " ", fishTree$tip.label)
-#fishTree$tip.label <- substr(fishTree$tip.label, 7, nchar(fishTree$tip.label))
-#fishTree$node.label <- NULL
+fishTree$tip.label <- gsub("_", " ", fishTree$tip.label)
+fishTree$tip.label <- substr(fishTree$tip.label, 7, nchar(fishTree$tip.label))
+fishTree$node.label <- NULL
 
 # Prune the constraint tree so only those tips that are match with names in dfNoOutgroups remain.
-#prunedFishTree <- drop.tip(phy = fishTree, 
- #                   tip = fishTree$tip.label[!fishTree$tip.label%in%dfOutgroups$species_name], rooted = T)
-#prunedFishTree$edge.length <- NULL  # Don't need branch lengths for binary constraint file (just relationships.)
-#prunedFishTree$node.label <- NULL
-#write.tree(prunedFishTree, file = "prunedFishTreeFINAL.txt")
-#write.tree(prunedFishTree, file = "prunedFishTreeFINAL.tre")
+prunedFishTree <- drop.tip(phy = fishTree, 
+                           tip = fishTree$tip.label[!fishTree$tip.label%in%dfNamesNoOG$species_name], rooted = T)
+prunedFishTree$edge.length <- NULL  # Don't need branch lengths for binary constraint file (just relationships.)
+prunedFishTree$node.label <- NULL
+write.tree(prunedFishTree, file = "prunedFishTreeFINAL.txt")
+write.tree(prunedFishTree, file = "prunedFishTreeFINAL.tre")
+
+### LEFT OFF HERE TUESDAY NIGHT MAY 23RD. Whole alignment tree in-group currently running
+# using a binary constraint.
+
 
 
 

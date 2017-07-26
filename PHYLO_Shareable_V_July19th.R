@@ -57,6 +57,7 @@ library(lattice)
 library(gtools)
 #install.packages("caret")
 library(caret)
+require(reshape)
 
 # For trait data purposes:
 #install.packages("adephylo")
@@ -74,6 +75,7 @@ library(dplyr)
 # Download sequences from BOLD using the function bold_seqspec() for sequence
 # and specimen data. In addition, I am only selecting those columns needed for
 # downstream analysis.
+# Note" Using Perciformes as an example taxon.
 dfInitial <- bold_seqspec(taxon = "Perciformes", 
                           geo = "all")[, c("recordID", "bin_uri", "order_name", 
                                            "family_name", "genus_name", 
@@ -85,7 +87,8 @@ dfInitial <- setDT(dfInitial)
 # Download outgroup species data from BOLD. These sequences may be used to root 
 # phylogenetic trees (depending if the taxa are an appropriate outgroup for
 # the organismal group under study).
-outgroups <- c("Sarcopterygii", "Anura")
+# Note: These are just example taxa.
+outgroups <- c("Acanthuriformes", "Gadiformes")
 dfOutgroup <- bold_seqspec(taxon = outgroups, 
                            geo = "all")[, c("recordID", "bin_uri", "order_name", 
                                             "family_name", "genus_name", 
@@ -101,7 +104,7 @@ dfFiltered <- rbindlist(l)
 ### FILTER 1 ###
 # Filters are used for quality control purposes.
 # Filtering for presence of a BIN URI. Assignment of a BIN URI is an indicator 
-# of sequence quality. BIN URI is also necessary for species assignment to the 
+# of sequence quality. A BIN URI is also necessary for species assignment to the 
 # BINs later on in the pipeline.
 containBIN <- dfFiltered[, grep("[:]", bin_uri)]
 dfFiltered <- dfFiltered[containBIN, ]
@@ -267,10 +270,12 @@ ResolveBIN <- function(x, y, method = c("bin_uri","recordID")){
 # Checking these manually so I can double check the BOLD record online.
 orderConflicts <- dfResolve[, which(number_of_orders > 1), by = bin_uri]
 orderConflicts <- unique(orderConflicts$bin_uri)
-# Don't seem to be any orderConflicts for this group.
+length(orderConflicts)
+# There doesn't seem to be any orderConflicts for this group.
 # Update number_of_orders column and make sure there are no more order conflicts.
 dfResolve[, number_of_orders := length(unique(order_name[!is.na(order_name)])), 
           keyby = bin_uri]
+# Making sure there aren't any order level conflicts.
 orderConflicts <- dfResolve[, which(number_of_orders > 1), by = bin_uri]
 orderConflicts <- unique(orderConflicts$bin_uri)
 rm(orderConflicts)
@@ -283,20 +288,16 @@ dfResolve[, number_of_families := length(unique(family_name[!is.na(family_name)]
 # Find number of BINs with family level conflicts.
 familyConflicts <- dfResolve[, which(number_of_families > 1), by = bin_uri]
 familyConflicts <- unique(familyConflicts$bin_uri)
-# BOLD:AAB0849 removing 1 deviant seq from different fam.
-dfResolve <- ResolveBIN(504268, dfResolve, method = "recordID")
+length(familyConflicts)
 # Removing BOLD:AAB2488. No clear consensus.
 dfResolve <- ResolveBIN("AAB2488", dfResolve, method = "bin_uri")
 # BOLD:AAC3188 removing 1 deviant seq from different fam.
 dfResolve <- ResolveBIN(338753, dfResolve, method = "recordID")
-# Removing BOLD:AAC3625. No clear consensus.
-dfResolve <- ResolveBIN("AAC3625", dfResolve, method = "bin_uri")
-# Removing BOLD:AAC8475. No clear consensus.
-dfResolve <- ResolveBIN("AAC8475", dfResolve, method = "bin_uri")
-# Removing BOLD:AAJ7485. No clear consensus.
-dfResolve <- ResolveBIN("AAJ7485", dfResolve, method = "bin_uri")
-# Removing BOLD:ACE7607. No clear consensus.
-dfResolve <- ResolveBIN("ACE7607", dfResolve, method = "bin_uri")
+# BOLD:AAD2909 removing 4 deviant seqs from different fam.
+dfResolve <- ResolveBIN(210644, dfResolve, method = "recordID")
+dfResolve <- ResolveBIN(210643, dfResolve, method = "recordID")
+dfResolve <- ResolveBIN(210645, dfResolve, method = "recordID")
+dfResolve <- ResolveBIN(210653, dfResolve, method = "recordID")
 # Update number_of_orders column and make sure there are no more order conflicts.
 dfResolve[, number_of_families := length(unique(family_name[!is.na(family_name)])), 
           keyby = bin_uri]
@@ -312,6 +313,7 @@ dfResolve[, number_of_genera := length(unique(genus_name[!is.na(genus_name)])),
 # At least 10+ records and 80% consistency.
 genusConflicts <- dfResolve[, which(number_of_genera > 1), by = bin_uri]
 genusConflictBins <- unique(genusConflicts$bin_uri)
+length(genusConflictBins)
 # Create a new datatable for BINs with genus level conflicts.
 dfGenusConflicts <- dfResolve[genusConflictBins, ]
 # Now we must determine the most common genus and if it has at least 80% 
@@ -346,8 +348,6 @@ dfAcceptedGenus <- dfGenusConflicts[which(majority_genus_percentage > 0.80)]
 # Find the UNACCEPTED conflicted bins and remove them from dfResolve.
 # bad = BINs in genusConflicts which were not accepted.
 bad <- anti_join(genusConflicts, dfAcceptedGenus, by = "bin_uri")
-#rm(genusConflicts)
-#rm(dtAcceptedGenus)
 badBins <- unique(bad$bin_uri)
 dfResolve <- dfResolve[!dfResolve$bin_uri %in% badBins, ]
 
@@ -358,6 +358,7 @@ dfResolve[, number_of_species := length(unique(species_name[!is.na(species_name)
 # At least 10+ records and 80% consistency.
 speciesConflicts <- dfResolve[, which(number_of_species > 1), by = bin_uri]
 speciesConflictBins <- unique(speciesConflicts$bin_uri)
+length(speciesConflictBins)
 # Create a new datatable for BINs with genus level conflicts.
 dfSpeciesConflicts <- dfResolve[speciesConflictBins, ]
 # Now we must determine the most common species and if it has at least 80% 
@@ -442,7 +443,7 @@ setkey(dfResolve, bin_uri)
 dfFiltered <- Reduce(function(...) merge(...), list(dfResolve, dfSpeciesLabel, 
                                                     dfGenusLabel, dfFamilyLabel, 
                                                     dfOrderLabel))
-# Datatable reorganization.
+# Datatable reorganization. Double check this datatable.
 dfFiltered <- dfFiltered[, .(bin_uri, recordID, order_name, order_label, 
                              family_name, family_label, genus_name, genus_label, 
                              species_name, species_label, nucleotides, 
@@ -465,20 +466,13 @@ dfLatitudeSpecies[, lat_num := as.numeric(lat)]
 dfLatitudeSpecies[, abs_lat_num := abs(lat_num)]
 # Determine a median latitude for each BIN using absolute values.
 dfLatitudeSpecies[, median_lat := median(abs_lat_num), keyby = bin_uri]
-# Find the minimum latitude.
-dfLatitudeSpecies[, lat_min := min(lat_num), keyby = bin_uri]
-# Find the maximum latitude.
-dfLatitudeSpecies[, lat_max := max(lat_num), keyby = bin_uri]
-# Determine a latitude range for each BIN.
-dfLatitudeSpecies[, lat_range := abs(lat_max - lat_min), keyby = bin_uri]
-
 
 # FUNCTION: Filtering for presence of trait data. This function is for the 
 # univariate analyses section..
 GetTraitSpecificData <- function(x, y) {
   # Filters a dataframe for only those data related to a specified trait.
   # x = dataframe of species and trait information.
-  # y = trait
+  # y = trait.
   
   # Make sure x is in dataframe format.
   x <- as.data.frame(x)
@@ -509,34 +503,18 @@ GetTraitSpecificData <- function(x, y) {
 }
 
 # While considering traits for eventual multivariate analyses, it is necessary
-# for them to have an adequate sample size (i.e. over 300 rows of data).
+# for them to have an adequate sample size (i.e. over x # rows of data, depending
+# on your purposes).
 # In addition, they should exhibit some amount of variation across the 
 # observations.
 # TRAIT: Latitude.
 # TEST 1: Does trait have data for at least 300 species?
 dfLatitude <- setDT(GetTraitSpecificData(dfLatitudeSpecies, 17))
+nrow(dfLatitude)
 # TEST 2: Does the trait have enough data variation?
 hist(dfLatitude$median_lat)
 
-# Trait: Latitudinal range.
-# TEST 1: Does trait have data for at least 300 species?
-dfLatRange <- setDT(GetTraitSpecificData(dfLatitudeSpecies, 20))
-rm(dfLatitudeSpecies)
-# For this trait, remove all singleton BINs (no range values possible).
-singletons <- which(dfLatRange$filtered_bin_size == 1)
-dfLatRange <- dfLatRange[-singletons, ]
-# TEST 2: Does the trait have enough data variation?
-hist(dfLatRange$lat_range)
-
-# Finally, prepare the dfLatitudeMV datatable by merging all univariate 
-# datatables. This datatable will be used for the eventual multivariate analysis.
-dfLatitudeMV <- merge(dfLatitude, dfLatRange, by = "bin_uri", all = TRUE)
-dfLatitudeMV <- dfLatitudeMV[, .(bin_uri, species_name = species_label.x, 
-                                 filtered_bin_size = filtered_bin_size.x, 
-                                 median_lat, lat_range)]
-
 ################################################################################
-
 # Datatable reorganization for dfFiltered.
 dfFiltered <- dfFiltered[, .(bin_uri, recordID, order_name = order_label, 
                              family_name = family_label, 
@@ -548,7 +526,6 @@ dfFiltered <- dfFiltered[, .(bin_uri, recordID, order_name = order_label,
 ### SECTION 2: FISHBASE TRAITS ###
 # In this section, traits from FishBase are extracted using the rfishbase package
 # and matched against the information obtained from BOLD.
-
 # Extract all of the species names that are available on FishBase.
 allFish <- fishbase
 allFish$fullName <- paste(allFish$Genus, allFish$Species)
@@ -566,15 +543,11 @@ rm(dfFishBaseSpecies)
 speciesNames <- dfBoldBase[, unique(species_name)]
 rm(dfBoldBase)
 
-
 ### TRAIT ASSIGNMENT AND RECODING SECTION ###
-# As there are multiple entries per species, I want to take the median or mode 
-# value of some traits. This will depend on the type of trait (i.e. continuous 
-# vs. categorical). If necessary, the trait data is recoded with data that is 
-# useable in a downstream regression model. For instance, categorical data is 
-# replaced with ranked or binary data. For instance, categorical traits that are 
-# assumed to beget higher rates of molecular evolution are assigned a higher 
-# rank. 
+# As there are multiple entries per species for some traits, I want to take the 
+# median or modevalue of some traits. This will depend on the type of trait 
+# i.e. continuous vs. categorical).
+# Note: Only some traits are shown here as examples.
 
 # Species version of GetTraitSpecificData (vs. BIN version).
 GetTraitSpecificData <- function(x, y) {
@@ -608,363 +581,96 @@ GetTraitSpecificData <- function(x, y) {
 }
 
 ### SPECIES TRAITS ###
-#dfSpecies <- data.frame(species(speciesNames))
+dfSpecies <- data.frame(species(speciesNames))
 # Storing this as a file.
-#write.csv(dfSpecies, file = "species_information.csv")
-dfSpecies <- fread("species_information.csv")
+write.csv(dfSpecies, file = "species_datatable.csv")
+dfSpecies <- fread("species_datatable.csv")
 # Datatable reorganization and renaming. Renaming column names to keep variable
 # syntax consistent throughout the pipeline.
 dfSpeciesTraits <- dfSpecies[, .(species_name = sciname, 
-                                 BodyShapeI, Fresh, Brack, Saltwater,
-                                 DemersPelag, AnaCat, DepthRangeShallow,
-                                 DepthRangeDeep, DepthRangeComShallow,
-                                 DepthRangeComDeep, LongevityWild, Length, 
-                                 LTypeMaxM, CommonLength, LTypeComM, Weight)]
+                                 BodyShapeI, LongevityWild, Length, LTypeMaxM)]
 # TRAIT: Body Shape I.
-# Filtering for presence of body shape I data. This is for the univariate analyses section.
-# TEST 1: Does trait have data for at least 500 species?
-# Answer: Yes!
+# Filtering for presence of body shape data. This is for the univariate analyses 
+# section.
+# TEST 1: Does the trait have an adequate sample size?
 dfBodyShapeI <- setDT(GetTraitSpecificData(dfSpeciesTraits, 2))
+nrow(dfBodyShapeI)
 # TEST 2: Does the trait have enough data variation?
-# Answer: "other" is too rare and will be removed.
 table(dfBodyShapeI$BodyShapeI)
-rareVars <- which(dfBodyShapeI$BodyShapeI == "other")
+# "other" is a rare category.
+rareVars <- which(dfBodyShapeI$BodyShapeI == "eel-like")
 dfBodyShapeI <- dfBodyShapeI[-rareVars, ]
 # Make it a factor variable.
 dfBodyShapeI[, BodyShapeI := as.factor(BodyShapeI)]
-# Also dropping this levels from the factor.
+# Also dropping this level from the factor.
 dfBodyShapeI$BodyShapeI <- droplevels(dfBodyShapeI$BodyShapeI)
 
-# TRAIT: Fresh.
-# Filtering for presence of trait data. This is for the univariate analyses section.
-# TEST 1: Does trait have data for at least 500 species?
-# Answer: Yes!
-dfFreshwater <- setDT(GetTraitSpecificData(dfSpeciesTraits, 3))
-# TEST 2: Does the trait have enough data variation?
-# Answer: Yes!
-table(dfFreshwater$Fresh)
-# Make it a factor variable.
-dfFreshwater[, Fresh := as.factor(Fresh)]
-
-# TRAIT: Fresh.
-# Filtering for presence of trait data. This is for the univariate analyses 
-# section.
-# TEST 1: Does trait have data for at least 500 species?
-# Answer: Yes!
-dfBrackish <- setDT(GetTraitSpecificData(dfSpeciesTraits, 4))
-# TEST 2: Does the trait have enough data variation?
-# Answer: Yes!
-table(dfBrackish$Brack)
-# Make it a factor variable.
-dfBrackish[, Brack := as.factor(Brack)]
-
-# TRAIT: Saltwater.
-# Filtering for presence of trait data. This is for the univariate analyses 
-# section.
-# TEST 1: Does trait have data for at least 500 species?
-# Answer: Yes!
-dfSaltwater <- setDT(GetTraitSpecificData(dfSpeciesTraits, 5))
-# TEST 2: Does the trait have enough data variation?
-# Answer: Yes!
-table(dfSaltwater$Saltwater)
-# Make it a factor variable.
-dfSaltwater[, Saltwater := as.factor(Saltwater)]
-
-# TRAIT: Demers/Pelag.
-# Filtering for presence of trait data. This is for the univariate analyses 
-# section.
-# TEST 1: Does trait have data for at least 500 species?
-# Answer: Yes!
-dfDemersPelag <- setDT(GetTraitSpecificData(dfSpeciesTraits, 6))
-# TEST 2: Does the trait have enough data variation?
-# Answer: Yes!
-table(dfDemersPelag$DemersPelag)
-# Make it a factor variable.
-dfDemersPelag[, DemersPelag := as.factor(DemersPelag)]
-
-# TRAIT: Ana/Cat.
-# Filtering for presence of trait data. This is for the univariate analyses 
-# section.
-# TEST 1: Does trait have data for at least 500 species?
-# Answer: Yes!
-dfAnaCat <- setDT(GetTraitSpecificData(dfSpeciesTraits, 7))
-# TEST 2: Does the trait have enough data variation?
-# Answer: Rare categories removed.
-table(dfAnaCat$AnaCat)
-# Answer: "other" is too rare and will be removed.
-rareVars <- which(dfAnaCat$AnaCat == "" |
-                  dfAnaCat$AnaCat == "amphidromous?" |
-                  dfAnaCat$AnaCat == "diadromous")
-dfAnaCat <- dfAnaCat[-rareVars, ]
-# Make it a factor variable.
-dfAnaCat[, AnaCat := as.factor(AnaCat)]
-# Also dropping this levels from the factor.
-dfAnaCat$AnaCat <- droplevels(dfAnaCat$AnaCat)
-
-# TRAIT: DepthRangeShallow.
-# Filtering for presence of trait data. This is for the univariate analyses 
-# section.
-# TEST 1: Does trait have data for at least 500 species?
-# Answer: Yes!
-dfDepthShallow <- setDT(GetTraitSpecificData(dfSpeciesTraits, 8))
-# TEST 2: Does the trait have enough data variation?
-# Answer: Yes.
-hist(dfDepthShallow$DepthRangeShallow)
-# Make it a numeric variable.
-dfDepthShallow[, DepthRangeShallow := as.double(DepthRangeShallow)]
-
-# TRAIT: DepthRangeDeep.
-# Filtering for presence of trait data. This is for the univariate analyses 
-# section.
-# TEST 1: Does trait have data for at least 500 species?
-# Answer: Yes!
-dfDepthDeep <- setDT(GetTraitSpecificData(dfSpeciesTraits, 9))
-# TEST 2: Does the trait have enough data variation?
-# Answer: 
-hist(dfDepthDeep$DepthRangeDeep)
-# Make it a numeric variable.
-dfDepthDeep[, DepthRangeDeep := as.double(DepthRangeDeep)]
-
-# TRAIT: DepthRangeComShallow.
-# Filtering for presence of trait data. This is for the univariate analyses 
-# section.
-# TEST 1: Does trait have data for at least 500 species?
-# Answer: Yes!
-dfDepthComShallow <- setDT(GetTraitSpecificData(dfSpeciesTraits, 10))
-# TEST 2: Does the trait have enough data variation?
-# Answer: 
-hist(dfDepthComShallow$DepthRangeComShallow)
-# Make it a numeric variable.
-dfDepthComShallow[, DepthRangeComShallow := as.double(DepthRangeComShallow)]
-
-# TRAIT: DepthRangeComDeep.
-# Filtering for presence of trait data. This is for the univariate analyses 
-# section.
-# TEST 1: Does trait have data for at least 500 species?
-# Answer: Yes!
-dfDepthComDeep <- setDT(GetTraitSpecificData(dfSpeciesTraits, 11))
-# TEST 2: Does the trait have enough data variation?
-# Answer: 
-hist(dfDepthComDeep$DepthRangeComDeep)
-# Make it a numeric variable.
-dfDepthComDeep[, DepthRangeComDeep := as.double(DepthRangeComDeep)]
-
 # TRAIT: LongevityWild.
-# Filtering for presence of trait data. This is for the univariate analyses 
-# section.
-# TEST 1: Does trait have data for at least 500 species?
-# Answer: Yes!
-dfLongWild <- setDT(GetTraitSpecificData(dfSpeciesTraits, 12))
+# TEST 1: Does the trait have an adequate sample size?
+dfLongWild <- setDT(GetTraitSpecificData(dfSpeciesTraits, 3))
+nrow(dfLongWild)
 # TEST 2: Does the trait have enough data variation?
-# Answer: 
 hist(dfLongWild$LongevityWild)
-# Make it a numeric variable.
-dfLongWild[, LongevityWild := as.double(LongevityWild)]
 range(dfLongWild$LongevityWild)
+# Make sure it is a numeric variable.
+dfLongWild[, LongevityWild := as.double(LongevityWild)]
 
 # TRAIT: Maximum length.
 # The column must first be converted to double (numeric) type.
 dfMaxLength <- dfSpeciesTraits[, Length := as.double(Length)]
-# Only want total length measurements.
+# We only want total length measurements.
 keep <- dfMaxLength[, which(LTypeMaxM == "TL")]
 dfMaxLength <- dfMaxLength[keep, ]
-# TEST 1: Does trait have data for at least 500 species?
-# Answer: Yes!
-dfMaxLength <- setDT(GetTraitSpecificData(dfMaxLength, 13))
+# TEST 1: Does the trait have an adequate sample size?
+dfMaxLength <- setDT(GetTraitSpecificData(dfMaxLength, 4))
+nrow(dfMaxLength)
 # TEST 2: Does the trait have enough data variation?
-# Answer: 
 hist(dfMaxLength$Length)
-
-# TRAIT: Common length.
-# The column must first be converted to double (numeric) type.
-dfComLength <- dfSpeciesTraits[, CommonLength := as.double(CommonLength)]
-# Only want total length measurements.
-keep <- dfComLength[, which(LTypeComM == "TL")]
-dfComLength <- dfComLength[keep, ]
-# TEST 1: Does trait have data for at least 500 species?
-# Answer: Yes!
-dfComLength <- setDT(GetTraitSpecificData(dfComLength, 15))
-# TEST 2: Does the trait have enough data variation?
-# Answer: 
-hist(dfComLength$CommonLength)
-
-# TRAIT: Weight.
-# Filtering for presence of trait data. This is for the univariate analyses 
-# section.
-# TEST 1: Does trait have data for at least 500 species?
-# Answer: Yes!
-dfWeight <- setDT(GetTraitSpecificData(dfSpeciesTraits, 17))
-# TEST 2: Does the trait have enough data variation?
-# Answer: 
-hist(dfWeight$Weight)
-# Make it a numeric variable.
-dfWeight[, Weight := as.double(Weight)]
-
-
-### STOCKS TRAITS ###
-#dfStocks <- data.frame(stocks(speciesNames))
-# Storing this as a file.
-#write.csv(dfStocks, file = "stocks_information.csv")
-dfStocks <- fread("stocks_information.csv")
-# Datatable reorganization and renaming. Renaming column names to keep variable
-# syntax consistent throughout the pipeline.
-dfStocksTraits <- dfStocks[, .(species_name = sciname, 
-                                 Level, TempMin, TempMax, EnvTemp)]
-# Only want species-level information.
-dfStocksTraits[, Level := revalue(Level, 
-                                  c("Species in general" = "species in general"))]
-keep <- dfStocksTraits[, which(Level == "species in general")]
-dfStocksTraits <- dfStocksTraits[keep, ]
-
-# TRAIT: TempMin.
-# Filtering for presence of trait data. This is for the univariate analyses 
-# section.
-# TEST 1: Does trait have data for at least 500 species?
-# Answer: Yes!
-dfTempMin <- setDT(GetTraitSpecificData(dfStocksTraits, 3))
-# TEST 2: Does the trait have enough data variation?
-# Answer: 
-hist(dfTempMin$TempMin)
-# Make it a numeric variable.
-dfTempMin[, TempMin := as.double(TempMin)]
-
-# TRAIT: TempMax.
-# Filtering for presence of trait data. This is for the univariate analyses 
-# section.
-# TEST 1: Does trait have data for at least 500 species?
-# Answer: Yes!
-dfTempMax <- setDT(GetTraitSpecificData(dfStocksTraits, 4))
-# TEST 2: Does the trait have enough data variation?
-# Answer: 
-hist(dfTempMax$TempMax)
-# Make it a numeric variable.
-dfTempMax[, TempMax := as.double(TempMax)]
-
-# TRAIT: EnvTemp.
-# Filtering for presence of trait data. This is for the univariate analyses 
-# section.
-# TEST 1: Does trait have data for at least 500 species?
-# Answer: Yes!
-dfEnvTemp <- setDT(GetTraitSpecificData(dfStocksTraits, 5))
-# TEST 2: Does the trait have enough data variation?
-# Answer: 
-table(dfEnvTemp$EnvTemp)
-rareVars <- which(dfEnvTemp$EnvTemp == "boreal" |
-                    dfEnvTemp$EnvTemp == "high altitude")
-dfEnvTemp <- dfEnvTemp[-rareVars, ]
-# Make it a factor variable.
-dfEnvTemp[, EnvTemp := as.factor(EnvTemp)]
-# Also dropping this levels from the factor.
-dfEnvTemp$EnvTemp <- droplevels(dfEnvTemp$EnvTemp)
+range(dfMaxLength$Length)
 
 # Finally, prepare the dfSpeciesGenMV datatable by merging all univariate 
 # datatables. This datatable will be used for the eventual multivariate analysis.
-dfSpeciesGenMV <- merge(dfBodyShapeI, dfFreshwater, all = TRUE, by = "species_name")
-dfSpeciesGenMV <- merge(dfSpeciesGenMV, dfBrackish, all = TRUE, by = "species_name")
-dfSpeciesGenMV <- merge(dfSpeciesGenMV, dfSaltwater, all = TRUE, by = "species_name")
-dfSpeciesGenMV <- merge(dfSpeciesGenMV, dfAnaCat, all = TRUE, by = "species_name")
-dfSpeciesGenMV <- merge(dfSpeciesGenMV, dfEnvTemp, all = TRUE, by = "species_name")
-dfSpeciesGenMV <- merge(dfSpeciesGenMV, dfLongWild, all = TRUE, by = "species_name")
-dfSpeciesGenMV <- merge(dfSpeciesGenMV, dfMaxLength, all = TRUE, by = "species_name")
-dfSpeciesGenMV <- merge(dfSpeciesGenMV, dfWeight, all = TRUE, by = "species_name")
-dfSpeciesGenMV <- merge(dfSpeciesGenMV, dfTempMin, all = TRUE, by = "species_name")
-dfSpeciesGenMV <- merge(dfSpeciesGenMV, dfTempMax, all = TRUE, by = "species_name")
-dfSpeciesGenMV <- merge(dfSpeciesGenMV, dfComLength, all = TRUE, by = "species_name")
-dfSpeciesGenMV <- merge(dfSpeciesGenMV, dfDemersPelag, all = TRUE, by = "species_name")
-dfSpeciesGenMV <- merge(dfSpeciesGenMV, dfDepthComShallow, all = TRUE, by = "species_name")
-dfSpeciesGenMV <- merge(dfSpeciesGenMV, dfDepthComDeep, all = TRUE, by = "species_name")
-dfSpeciesGenMV <- merge(dfSpeciesGenMV, dfDepthShallow, all = TRUE, by = "species_name")
-dfSpeciesGenMV <- merge(dfSpeciesGenMV, dfDepthDeep, all = TRUE, by = "species_name")
+# Merging multiple datatables at once.
+dfSpeciesGenMV <- Reduce(function(...) merge(...), 
+                         list(dfBodyShapeI, dfLongWild, dfMaxLength))
 
+### LIFE HISTORY RELATED ###
+# Maturity.
+dfMaturity <- data.frame(maturity(speciesNames))
+write.csv(dfMaturity, file = "maturity_datatable.csv") 
+# Read in the maturity information.
+dfMaturity <- fread("maturity_datatable.csv")
+# Datatable reorganization and renaming. Renaming column names to keep variable
+# syntax consistent throughout the pipeline.
+dfMaturityTraits <- dfMaturity[, .(species_name = sciname, age_at_maturity = tm)]
 
-### MORPHOLOGY TRAITS ###
-#dfMorphology <- data.frame(morphology(speciesNames))
-# Storing this as a file.
-#write.csv(dfMorphology, file = "morphology_information.csv") 
-# Read in the ecology information.
-dfMorphology <- fread("morphology_information.csv")
-# Get rid of columns I do not need for the regression analysis.
-dfMorphologyTraits <- dfMorphology[, .(species_name = sciname, 
-                                       body_shape_II = BodyShapeII, 
-                                       pos_of_mouth = PosofMouth, 
-                                       type_of_scales = TypeofScales)]
-# These traits are unlikely to differ between different stocks of fish so I can 
-# take a single row per species.
-dfMorphologyTraits <- dfMorphologyTraits[!duplicated(dfMorphologyTraits$species_name), ] 
-
-# Recoding dfMorphologyTraits.
-# Converting to factor type as these are discrete traits.
-changeVars <- c(2:4)
-dfMorphologyTraits[, (changeVars) := lapply(.SD, as.factor), .SDcols = changeVars]
-
-# TRAIT: Body Shape II.
-# Filtering for presence of body shape II data. This is for the univariate 
-# analyses section.
-# TEST 1: Does trait have data for at least 500 species?
-# Answer: Yes!
-dfBodyShapeII <- setDT(GetTraitSpecificData(dfMorphologyTraits, 2))
+# Median trait(s).
+# TRAIT: Age at maturity.
+# The column must first be converted to double (numeric) type.
+dfAgeMaturity <- dfMaturityTraits[, age_at_maturity := as.double(age_at_maturity)]
+rm(dfMaturityTraits)
+# The median value is then determined for each species.
+dfAgeMaturity[, age_at_maturity := median(age_at_maturity, na.rm = TRUE), keyby = species_name]
+# Filtering for presence of average depth data. This is for the univariate analyses section.
+# TEST 1: Does the trait have an adequate sample size?
+dfAgeMaturity <- setDT(GetTraitSpecificData(dfAgeMaturity, 2))
 # TEST 2: Does the trait have enough data variation?
-# Answer: "other" and "angular" are too rare and will be removed.
-table(dfBodyShapeII$body_shape_II)
-rareVars <- which(dfBodyShapeII$body_shape_II == "other (see Diagnosi" | dfBodyShapeII$body_shape_II == "angular")
-dfBodyShapeII <- dfBodyShapeII[-rareVars, ]
-# Also dropping this levels from the factor.
-dfBodyShapeII$body_shape_II <- droplevels(dfBodyShapeII$body_shape_II)
-
-# TRAIT: Position of Mouth.
-# Filtering for presence of position of mouth data. This is for the univariate 
-# analyses section.
-# TEST 1: Does trait have data for at least 500 species?
-# Answer: Yes!
-dfPosMouth <- setDT(GetTraitSpecificData(dfMorphologyTraits, 3))
-# TEST 2: Does the trait have enough data variation?
-# Answer: Yes!
-table(dfPosMouth$pos_of_mouth)
-
-
-# TRAIT: Type of Scales.
-# First, revalue trait so "cycloid" is equivalent to "cycloid scales".
-dfMorphologyTraits[, type_of_scales := revalue(type_of_scales, 
-                                               c("cycloid" = "cycloid scales"))]
-# Filtering for presence of type of scales data. This is for the univariate 
-# analyses section.
-# TEST 1: Does trait have data for at least 500 species?
-# Answer: Yes!
-dfScaleType <- setDT(GetTraitSpecificData(dfMorphologyTraits, 4))
-rm(dfMorphologyTraits)
-# TEST 2: Does the trait have enough data variation?
-# Answer: "other" and "rhombic scales" are too rare and are removed.
-table(dfScaleType$type_of_scales)
-rareVars <- which(dfScaleType$type_of_scales == "other (see remark)" | 
-                    dfScaleType$type_of_scales == "rhombic scales")
-dfScaleType <- dfScaleType[-rareVars, ]
-# Also dropping this levels from the factor.
-dfScaleType$type_of_scales <- droplevels(dfScaleType$type_of_scales)
-
-
-# Finally, prepare the dfMorphologyMV datatable by merging all univariate 
-# datatables.
-# This datatable will be used for the eventual multivariate analysis.
-dfMorphologyMV <- merge(dfBodyShapeII, dfOperPresent, all = TRUE, 
-                        by = "species_name")
-dfMorphologyMV <- merge(dfMorphologyMV, dfPosMouth, all = TRUE, 
-                        by = "species_name")
-dfMorphologyMV <- merge(dfMorphologyMV, dfScaleType, all = TRUE, 
-                        by = "species_name")
-
+hist(dfAgeMaturity$age_at_maturity)
+range(dfAgeMaturity$age_at_maturity) 
 
 ### ECOLOGY TRAITS ###
-#dfEcology <- data.frame(ecology(speciesNames))
+dfEcology <- data.frame(ecology(speciesNames))
 # Storing this as a file.
-#write.csv(dfEcology, file = "ecology_information.csv") 
+write.csv(dfEcology, file = "ecology_datatable.csv") 
 # Read in the ecology information.
-dfEcology <- fread("ecology_information.csv")
+dfEcology <- fread("ecology_datatable.csv")
 colnames(dfEcology)[3] <- "species_name"
 # Get rid of columns I do not need for the regression analysis. 
 # Note: There is only one row per species in dfEcology.
-dfEcologyTraits <- dfEcology[, c(3, 7:27, 29, 31, 33, 39, 52, 66:78,
-                                 80:88, 90:110, 117:118, 121)]
-# Recode ecology traits to the types needed for regression analysis.
+dfEcologyTraits <- dfEcology[, c(3, 7, 15, 25:26, 31, 66)]
+
+# As the columns are coded as integers right now, we need to recode them to the 
+# types needed for regression analysis (i.e. factor type).
 # Which columns are integers?
 integerVars <- dfEcologyTraits[, lapply(.SD, is.integer)]
 integerVars <- which(integerVars == "TRUE")
@@ -977,362 +683,102 @@ characterVars <- tail(characterVars, -1)
 changeVars <- c(integerVars, characterVars)
 # Change all of the character and integer columns to factor type.
 dfEcologyTraits[, (changeVars) := lapply(.SD, as.factor), .SDcols = changeVars]
-# Recode the integer variables.
+# Recode the integer variables (from "-1" to "1").
 dfEcologyTraits[, (integerVars) := lapply(.SD, function(x) revalue(x, c("-1" = "1"))), 
                 .SDcols = integerVars]
 rm(integerVars)
 rm(characterVars)
 rm(changeVars)
 
-# There are a lot of traits here so I am going to use nearZeroVar to cut a lot 
-# of them at once. AKA Cutting traits that have little variation (rarer 
-# categories less than 1%). The remaining traits automically pass the variation 
-# test but I will still look more closely at non-binary traits.
-dfEcologyTraits <- as.data.frame(dfEcologyTraits)
-dfEcologyTraits <- dfEcologyTraits[, -nearZeroVar(dfEcologyTraits, 
-                                                  freqCut = 99/1)]
-
-# Categorical traits.
+### Categorical traits. ###
 # Binary traits.
-
-# TRAIT: Neritic
+# TRAIT: Neritic.
+# TEST 1: Does the trait have an adequate sample size?
 dfNeritic <- setDT(GetTraitSpecificData(dfEcologyTraits, 2))
+nrow(dfNeritic)
+# TEST 2: Does the trait have enough data variation?
+table(dfNeritic$Neritic)
 
-# TRAIT: Oceanic
-dfOceanic <- setDT(GetTraitSpecificData(dfEcologyTraits, 4))
-
-# TRAIT: Epipelagic
-dfEpipelagic <- setDT(GetTraitSpecificData(dfEcologyTraits, 5))
-
-# TRAIT: Mesopelagic
-dfMesopelagic <- setDT(GetTraitSpecificData(dfEcologyTraits, 6))
-
-# TRAIT: Bathypelagic
-dfBathypelagic <- setDT(GetTraitSpecificData(dfEcologyTraits, 7))
-
-# TRAIT: Estuaries
-dfEstuaries <- setDT(GetTraitSpecificData(dfEcologyTraits, 8))
-
-# TRAIT: Mangroves
-dfMangroves <- setDT(GetTraitSpecificData(dfEcologyTraits, 9))
+# TRAIT: Oceanic.
+# TEST 1: Does the trait have an adequate sample size?
+dfOceanic <- setDT(GetTraitSpecificData(dfEcologyTraits, 3))
+nrow(dfOceanic)
+# TEST 2: Does the trait have enough data variation?
+table(dfOceanic$Oceanic)
 
 # TRAIT: Stream.
-# Filtering for presence of type of stream data. This is for the univariate 
-# analyses section.
-# TEST 1: Does trait have data for at least 500 species?
-# Answer: Yes!
-dfStreams <- setDT(GetTraitSpecificData(dfEcologyTraits, 10))
+# TEST 1: Does the trait have an adequate sample size?
+dfStreams <- setDT(GetTraitSpecificData(dfEcologyTraits, 4))
+nrow(dfStreams)
+# TEST 2: Does the trait have enough data variation?
+table(dfStreams$Stream)
 
 # TRAIT: Lakes.
-# Filtering for presence of type of lake data. This is for the univariate 
-# analyses section.
-# TEST 1: Does trait have data for at least 500 species?
-# Answer: Yes!
-dfLakes <- setDT(GetTraitSpecificData(dfEcologyTraits, 11))
-
-# TRAIT: Schooling.
-# Filtering for presence of type of lake data. This is for the univariate 
-# analyses section.
-# TEST 1: Does trait have data for at least 500 species?
-# Answer: Yes!
-dfSchooling <- setDT(GetTraitSpecificData(dfEcologyTraits, 16))
+# TEST 1: Does the trait have an adequate sample size?
+dfLakes <- setDT(GetTraitSpecificData(dfEcologyTraits, 5))
+nrow(dfLakes)
+# TEST 2: Does the trait have enough data variation?
+table(dfLakes$Lakes)
 
 # TRAIT: Benthic.
-# Filtering for presence of type of lake data. This is for the univariate 
-# analyses section.
-# TEST 1: Does trait have data for at least 500 species?
-# Answer: Yes!
-dfBenthic <- setDT(GetTraitSpecificData(dfEcologyTraits, 17))
-
-# TRAIT: Coral reefs.
-# Filtering for presence of type of lake data. This is for the univariate 
-# analyses section.
-# TEST 1: Does trait have data for at least 500 species?
-# Answer: Yes!
-dfCoralReefs <- setDT(GetTraitSpecificData(dfEcologyTraits, 27))
-
+# TEST 1: Does the trait have an adequate sample size?
+dfBenthic <- setDT(GetTraitSpecificData(dfEcologyTraits, 7))
+nrow(dfBenthic)
+# TEST 2: Does the trait have enough data variation?
+table(dfBenthic$Benthic)
 
 # Non-binary traits.
 # TRAIT: Feeding Type.
-# Filtering for presence of type of feeding type data. This is for the 
-# univariate analyses section.
-# TEST 1: Does trait have data for at least 500 species?
-# Answer: Yes!
-dfFeedingType <- setDT(GetTraitSpecificData(dfEcologyTraits, 13))
+# TEST 1: Does the trait have an adequate sample size?
+dfFeedingType <- setDT(GetTraitSpecificData(dfEcologyTraits, 6))
 # TEST 2: Does the trait have enough data variation?
-# Answer: Many categories do not reach the 1% threshold and are removed.
+# Many categories do not reach the 1% threshold and are removed.
 table(dfFeedingType$FeedingType)
-rareVars <- which(dfFeedingType$FeedingType == "feeding on a host (parasite)" |
-                  dfFeedingType$FeedingType == "feeding on dead animals (scavenger)" |
-                  dfFeedingType$FeedingType == "feeding on the prey of a host (commensal)" |
+rareVars <- which(dfFeedingType$FeedingType == "filtering plankton" |
                   dfFeedingType$FeedingType == "other" | 
-                  dfFeedingType$FeedingType == "picking parasites off a host (cleaner)" |
-                  dfFeedingType$FeedingType == "plants/detritus+animals (troph. 2.2-2.79)" |
                   dfFeedingType$FeedingType == "sucking food-containing material")
 dfFeedingType <- dfFeedingType[-rareVars, ]
 # Also dropping these levels from the factor.
 dfFeedingType$FeedingType <- droplevels(dfFeedingType$FeedingType)
 
-
-# Continuous traits.
-# TRAIT: Diet Troph.
-# Filtering for presence of type of diet troph data. This is for the univariate 
-# analyses section.
-# TEST 1: Does trait have data for at least 500 species?
-# Answer: Yes!
-dfDietTroph <- setDT(GetTraitSpecificData(dfEcologyTraits, 14))
-# TEST 2: Does the trait have enough data variation?
-hist(dfDietTroph$DietTroph)
-
-# TRAIT: Food Troph.
-# Filtering for presence of type of diet troph data. This is for the univariate analyses section.
-# TEST 1: Does trait have data for at least 500 species?
-# Answer: Yes!
-dfFoodTroph <- setDT(GetTraitSpecificData(dfEcologyTraits, 15))
-# TEST 2: Does the trait have enough data variation?
-hist(dfFoodTroph$FoodTroph)
-rm(dfEcologyTraits)
-
-# Finally, prepare the dfEcologyMV datatable by merging all univariate datatables.
-dfEcologyMV <- merge(dfNeritic, dfOceanic, all = TRUE, by = "species_name")
-dfEcologyMV <- merge(dfEcologyMV, dfEpipelagic, all = TRUE, by = "species_name")
-dfEcologyMV <- merge(dfEcologyMV, dfMesopelagic, all = TRUE, by = "species_name")
-dfEcologyMV <- merge(dfEcologyMV, dfBathypelagic, all = TRUE, by = "species_name")
-dfEcologyMV <- merge(dfEcologyMV, dfEstuaries, all = TRUE, by = "species_name")
-dfEcologyMV <- merge(dfEcologyMV, dfMangroves, all = TRUE, by = "species_name")
-dfEcologyMV <- merge(dfEcologyMV, dfStreams, all = TRUE, by = "species_name")
-dfEcologyMV <- merge(dfEcologyMV, dfLakes, all = TRUE, by = "species_name")
-dfEcologyMV <- merge(dfEcologyMV, dfHerbivory, all = TRUE, by = "species_name")
-dfEcologyMV <- merge(dfEcologyMV, dfFeedingType, all = TRUE, by = "species_name")
-dfEcologyMV <- merge(dfEcologyMV, dfDietTroph, all = TRUE, by = "species_name")
-dfEcologyMV <- merge(dfEcologyMV, dfFoodTroph, all = TRUE, by = "species_name")
-dfEcologyMV <- merge(dfEcologyMV, dfSchooling, all = TRUE, by = "species_name")
-dfEcologyMV <- merge(dfEcologyMV, dfBenthic, all = TRUE, by = "species_name")
-dfEcologyMV <- merge(dfEcologyMV, dfCoralReefs, all = TRUE, by = "species_name")
-
-
-
-### LIFE HISTORY RELATED ###
-# Maturity.
-#dfMaturity <- data.frame(maturity(speciesNames))
-#write.csv(dfMaturity, file = "maturity_information.csv") 
-# Read in the maturity information.
-dfMaturity <- fread("maturity_information.csv")
-# Datatable reorganization and renaming. Renaming column names to keep variable
-# syntax consistent throughout the pipeline.
-dfMaturityTraits <- dfMaturity[, .(species_name = sciname, sex = Sex, age_at_maturity = tm)]
-# Should sex be a control variable here?
-
-# Median trait(s).
-# TRAIT: Age at maturity.
-# The column must first be converted to double (numeric) type.
-dfAgeMaturity <- dfMaturityTraits[, age_at_maturity := as.double(age_at_maturity)]
-rm(dfMaturityTraits)
-# The median value is then determined for each species.
-dfAgeMaturity[, age_at_maturity := median(age_at_maturity, na.rm = TRUE), keyby = species_name]
-# Filtering for presence of average depth data. This is for the univariate analyses section.
-# 500 SPECIES TEST: 374 but keeping because interesting trait.
-dfAgeMaturity <- setDT(GetTraitSpecificData(dfAgeMaturity, 3))
-# TEST 2: Does the trait have enough data variation?
-# Answer: Skewed.
-hist(dfAgeMaturity$age_at_maturity)
-# Only one maturity trait currently unless we use sex as control variable.
-dfMaturityMV <- dfAgeMaturity 
-
-# Reproduction.
-#dfReproduction <- data.frame(reproduction(speciesNames))
-#write.csv(dfReproduction, file = "reproduction_information.csv") 
-# Read in the reproduction information.
-dfReproduction <- fread("reproduction_information.csv")
-# Datatable reorganization and renaming. Renaming column names to keep variable
-# syntax consistent throughout the pipeline.
-dfReproTraits <- dfReproduction[, .(species_name = sciname, repro_mode = ReproMode, 
-                                    fertilization = Fertilization, rep_guild_1 = RepGuild1, 
-                                    rep_guild_2 = RepGuild2, parental_care = ParentalCare)]
-# Unlikely to vary within species.
-dfReproTraits <- dfReproTraits[!duplicated(dfReproTraits$species_name), ]
-
-x <- dfReproTraits[duplicated(dfReproTraits$species_name), ]
-# First, change all of the traits to factor type.
-changeVars <- c(2:6)
-dfReproTraits[, (changeVars) := lapply(.SD, as.factor), .SDcols = changeVars]
-
-# TRAIT: Repro mode.
-# Filtering for presence of trait data. This is for the univariate analyses section.
-# TEST 1: Does trait have data for at least 500 species?
-# Answer: Yes!
-dfReproMode <- setDT(GetTraitSpecificData(dfReproTraits, 2))
-# TEST 2: Does the trait have enough data variation?
-# Answer:
-table(dfReproMode$repro_mode)
-rareVars <- which(dfReproMode$repro_mode == "true hermaphroditism")
-dfReproMode <- dfReproMode[-rareVars, ]
-# Also dropping these levels from the factor.
-dfReproMode$repro_mode <- droplevels(dfReproMode$repro_mode)
-
-# TRAIT: Fertilization.
-# Filtering for presence of trait data. This is for the univariate analyses section.
-# TEST 1: Does trait have data for at least 500 species?
-# Answer: Yes!
-dfFert <- setDT(GetTraitSpecificData(dfReproTraits, 3))
-# TEST 2: Does the trait have enough data variation?
-# Answer: A couple rare categories will be removed.
-table(dfFert$fertilization)
-rareVars <- which(dfFert$fertilization == "in mouth" | 
-                    dfFert$fertilization == "other")
-dfFert <- dfFert[-rareVars, ]
-# Also dropping these levels from the factor.
-dfFert$fertilization <- droplevels(dfFert$fertilization)
-
-# TRAIT: Rep Guild 1.
-# TEST 1: Does trait have data for at least 500 species?
-# Answer: Yes!
-dfRepGuild1 <- setDT(GetTraitSpecificData(dfReproTraits, 4))
-# TEST 2: Does the trait have enough data variation?
-# Answer: Looks good.
-table(dfRepGuild1$rep_guild_1)
-
-# TRAIT: Rep Guild 2.
-# Filtering for presence of trait data. This is for the univariate analyses section.
-# TEST 1: Does trait have data for at least 500 species?
-# Answer: Yes!
-dfRepGuild2 <- setDT(GetTraitSpecificData(dfReproTraits, 5))
-# Revalue the category names so the syntax is consistent (i.e. "Polar" should be "polar").
-dfRepGuild2[, rep_guild_2 := revalue(rep_guild_2, 
-                                     c("Brood hiders" = "brood hiders", 
-                                       "Clutch tenders" = "clutch tenders", 
-                                       "External brooders" = "external brooders", 
-                                       "Open water/substratum egg scatterers" = "open water/substratum egg scatterers"))]
-# TEST 2: Does the trait have enough data variation?
-# Answer: Yes.
-table(dfRepGuild2$rep_guild_2)
-
-# TRAIT: Parental care.
-# Filtering for presence of trait data. This is for the univariate analyses 
-# section.
-# TEST 1: Does trait have data for at least 500 species?
-# Answer: Yes!
-dfParentalCare <- setDT(GetTraitSpecificData(dfReproTraits, 6))
-rm(dfReproTraits)
-# TEST 2: Does the trait have enough data variation?
-# Answer: Yes.
-table(dfParentalCare$parental_care)
-
-# Finally, prepare the dfReproductionMV datatable by merging all univariate 
+# Finally, prepare the dfEcologyMV datatable by merging all univariate 
 # datatables.
-dfReproductionMV <- merge(dfReproMode, dfFert, all = TRUE, by = "species_name")
-dfReproductionMV <- merge(dfReproductionMV, dfRepGuild1, all = TRUE, 
-                          by = "species_name")
-dfReproductionMV <- merge(dfReproductionMV, dfRepGuild2, all = TRUE, 
-                          by = "species_name")
-dfReproductionMV <- merge(dfReproductionMV, dfParentalCare, all = TRUE, 
-                          by = "species_name")
-
-
-
-### PHYSIOLOGY RELATED ###
-# Swimming.
-#dfSwimming <- data.frame(swimming(speciesNames))
-#write.csv(dfSwimming, file = "swimming_information.csv") 
-# Read in the swimming information.
-dfSwimming <- fread("swimming_information.csv")
-# Datatable reorganization and renaming. Renaming column names to keep variable
-# syntax consistent throughout the pipeline.
-dfSwimmingTraits <- dfSwimming[, .(species_name = sciname, 
-                                   adult_type = AdultType, 
-                                   adult_mode = AdultMode)]
-# First, change all of the traits to factor type.
-changeVars <- c(2:3)
-dfSwimmingTraits[, (changeVars) := lapply(.SD, as.factor), .SDcols = changeVars]
-rm(changeVars)
-rm(speciesNames)
-
-# TRAIT: Adult Type.
-# Filtering for presence of trait data. This is for the univariate analyses 
-# section.
-# TEST 1: Does trait have data for at least 500 species?
-# Answer: Yes!
-dfSwimmingType <- setDT(GetTraitSpecificData(dfSwimmingTraits, 2))
-# TEST 2: Does the trait have enough data variation?
-# Answer: One rare category.
-table(dfSwimmingType$adult_type)
-# Revalue the category names so the syntax is consistent 
-# (i.e. "Polar" should be "polar").
-dfSwimmingType[, adult_type := revalue(adult_type, 
-                                       c("Undulation of median or pectoral fins" = "undulation of median or pectoral fins"))]
-
-# TRAIT: Adult Mode.
-# Filtering for presence of trait data. This is for the univariate analyses section.
-# TEST 1: Does trait have data for at least 500 species?
-# Answer: Yes!
-dfSwimmingMode <- setDT(GetTraitSpecificData(dfSwimmingTraits, 3))
-rm(dfSwimmingTraits)
-# Revalue the category names so the syntax is consistent 
-# (i.e. "Polar" should be "polar").
-dfSwimmingMode[, adult_mode := revalue(adult_mode, 
-                                       c("Balistiform" = "balistiform", 
-                                         "Subcarangiform" = "subcarangiform"))]
-# TEST 2: Does the trait have enough data variation?
-# Answer: Several rare categories.
-table(dfSwimmingMode$adult_mode)
-rareVars <- which(dfSwimmingMode$adult_mode == "Bathypteroiform" | 
-                  dfSwimmingMode$adult_mode == "tetraodontiform")
-dfSwimmingMode <- dfSwimmingMode[-rareVars, ]
-rm(rareVars)
-# Also dropping these levels from the factor.
-dfSwimmingMode$adult_mode <- droplevels(dfSwimmingMode$adult_mode)
-
-# Finally, prepare the dfSwimmingMV datatable by merging all univariate 
-# datatables.
-dfSwimmingMV <- merge(dfSwimmingType, dfSwimmingMode, all = TRUE, 
-                      by = "species_name")
-
+# Merging multiple datatables at once.
+dfEcologyMV <- Reduce(function(...) merge(...), list(dfNeritic, dfOceanic,
+                                                     dfStreams, dfLakes,
+                                                     dfFeedingType, dfBenthic))
 
 # Construction of dfTraits datatable.
-# This table contains all potential traits for multivariate analysis.
-# Let's merge the trait information back to dfFiltered.
+# This table contains all the potential traits for multivariate analysis.
+# Let's first merge the trait information back to dfFiltered.
 # NA/NULL/blank for those species that don't have info for that particular trait.
-# I only want a single row per BIN for this merging process.
+# Note: I only want a single row per BIN from dfFiltered for this merging 
+# process (i.e. I just want the bin name, species name, and size of the bin). 
 dfFilteredSingle <- dfFiltered[!duplicated(dfFiltered$bin_uri), ]
 # Let's take the columns we need to construct the dfTraits datatable.
 dfFilteredSingle <- dfFilteredSingle[, .(bin_uri, species_name, 
                                          initial_bin_size, filtered_bin_size)]
 # Now merge to all of the trait MV datatables.
-dfTraits <- merge(dfFilteredSingle, dfLatitudeMV, all = TRUE, by = "bin_uri")
-rm(dfFilteredSingle)
-rm(dfLatitudeMV)
+dfTraits <- merge(dfFilteredSingle, dfLatitude, all = TRUE, by = "bin_uri")
+# Set the keys for datatable merging.
+setkey(dfTraits, species_name)
+setkey(dfSpeciesGenMV, species_name)
+setkey(dfEcologyMV, species_name)
+dfTraits <- Reduce(function(...) merge(..., all = T), list(dfTraits, 
+                                                           dfSpeciesGenMV,
+                                                           dfEcologyMV))
 # Dataframe reorganization.
-dfTraits <- dfTraits[, c(1:4, 7:8)]
-colnames(dfTraits)[2] <- "species_name"
+dfTraits <- dfTraits[, c(1:4, 7:16)]
 colnames(dfTraits)[4] <- "filtered_bin_size"
-# Merge the FishBase traits.
-dfTraits <- merge(dfTraits, dfSpeciesGenMV, all = TRUE, by = "species_name")
-dfTraits <- merge(dfTraits, dfEcologyMV, all = TRUE, by = "species_name")
-dfTraits <- merge(dfTraits, dfReproductionMV, all = TRUE, by = "species_name")
-dfTraits <- merge(dfTraits, dfSwimmingMV, all = TRUE, by = "species_name")
-dfTraits <- merge(dfTraits, dfMaturityMV, all = TRUE, by = "species_name")
-dfTraits <- merge(dfTraits, dfMorphologyMV, all = TRUE, by = "species_name")
-rm(dfEcologyMV)
-rm(dfReproductionMV)
-rm(dfSwimmingMV)
-rm(dfMaturityMV)
-rm(dfMorphologyMV)
-
-# Collect the species names needed for the master phylogeny.
-dfMasterSpecies <- as.data.frame(unique(dfTraits$species_name))
-colnames(dfMasterSpecies)[1] <- "species_name"
 
 # Merge back to dfFiltered to obtain all of the sequence information for 
-# each BIN.
-# This is for creation of the master phylogeny.
-# For univariate tree, dfTraits here instead of dfCompleteCases.
+# each BIN. This is for creation of the master phylogeny.
 dfPreCentroid <- merge(dfFiltered, dfTraits, by = "bin_uri")
 # Dataframe reorganization and renaming.
 colnames(dfPreCentroid)[6] <- "species_name"
 colnames(dfPreCentroid)[8] <- "initial_bin_size"
 colnames(dfPreCentroid)[9] <- "filtered_bin_size"
 dfPreCentroid <- dfPreCentroid[, c(1:9)]
-
 
 ### SECTION 3: CENTROID SEQUENCE DETERMINATION ###
 # Centroid Sequence: BIN sequence with minimum average pairwise distance to all 
@@ -1365,7 +811,7 @@ if (length(largeBins) > 0) {
   # each element being a unique BIN. 
   largeBinList <- lapply(unique(dfCentroidSeqs$bin_uri), 
                         function(x) dfCentroidSeqs[dfCentroidSeqs$bin_uri == x,])
-    
+  
   # Extract record id from each BIN.
   largeBinRecordId <- lapply(largeBinList, function(x) (x$recordID))
   
@@ -1381,13 +827,9 @@ if (length(largeBins) > 0) {
   rm(largeBinRecordId)
   
   # Alignment using muscle.
-  #alignment1 <- lapply(DNAStringSet1, function(x) 
-    #muscle::muscle(x, diags = TRUE, gapopen = -3000))
-  
-  # Alignment using DECIPHER.
   alignment1 <- lapply(DNAStringSet1, function(x) 
-    AlignSeqs(x, iterations = 0, refinements = 0, gapOpening = -3000))
-
+    muscle::muscle(x, diags = TRUE, gapopen = -3000))
+  
   # We can then convert each alignment to DNAbin format.
   dnaBINCentroid <- lapply(alignment1, function(x) as.DNAbin(x))
   #rm(alignment1)
@@ -1433,14 +875,11 @@ dfAllSeqs <- dfAllSeqs[!duplicated(dfAllSeqs$bin_uri), ]
 
 # Take BINs with highest number of sequences with species info in order to avoid
 # using BINs that were assigned the same species label.
-# This will be changed in the future but for tree building purposes I just need one
-# species name for each BIN.
 dfAllSeqs <- merge(aggregate(filtered_bin_size ~ species_name, data = dfAllSeqs, 
                              max), dfAllSeqs, all.x = T, sort = TRUE)
 dup_majority_species <- which(duplicated(dfAllSeqs$species_name)) # Dealing with ties.
 dfAllSeqs <- dfAllSeqs[-dup_majority_species,]
 rm(dup_majority_species)
-
 
 ################################################################################
 # REFERENCE SEQUENCE TRIMMING #
@@ -1495,10 +934,6 @@ refSeqTrim <- function(data) {
   # This is the format required for the alignment.
   DNAStringSet2 <- DNAStringSet(alignmentSeqsPlusRef)
   rm(alignmentSeqsPlusRef)
-  
-  # Writing this to file so I can perform alignment in MEGA.
-  #writeXStringSet(DNAStringSet2, file = "centroidsToBeAligned.fas", 
-   #               format = "fasta")
 
   # Run a multiple sequence alignment of all sequences including the reference 
   # using MUSCLE. This could take several minutes depending on the number of 
@@ -1571,7 +1006,6 @@ refSeqTrim <- function(data) {
 
 dfCheckAllSeqs <- refSeqTrim(dfAllSeqs)
 
-
 ### ALIGNMENT QUALITY CHECKING ###
 # Here, extremely gappy/ungappy sequences are removed. These sequences are 
 # assumed to contribute to misalignment of the sequences or may even be 
@@ -1582,15 +1016,13 @@ dfCheckAllSeqs <- refSeqTrim(dfAllSeqs)
 internalGaps <- sapply(regmatches(dfCheckAllSeqs$nucleotides, 
                                   gregexpr("[-+]", 
                                            dfCheckAllSeqs$nucleotides)), length)
-  
 # Mean gap length and range.
 meanGap <- mean(internalGaps)
 extremeHighGap <- meanGap + 7  # Upper range.
 extremeLowGap <- meanGap - 7  # Lower range.
 rm(meanGap)
-
-# We then loop through each sequence to see if the number of gaps 
-# deviates greatly from the mean.
+# We then loop through each sequence to see if the number of gaps deviates 
+# greatly from the mean.
 # Which sequences exceed the range of meanGap +/- 7?
 extremeSeqs <- foreach(i = 1:nrow(dfCheckAllSeqs)) %do% 
   which(internalGaps[[i]] > extremeHighGap | internalGaps[[i]] < extremeLowGap)
@@ -1599,24 +1031,19 @@ rm(extremeLowGap)
 rm(internalGaps)
 # The "deviant" sequences will be flagged with a 1.
 extremeBins <- which(extremeSeqs > 0)
-
 # Subset out these sequences to look at them if desired.
 dfExtreme <- dfCheckAllSeqs[extremeBins, ] # Need BIN names not index numbers.
-# Make sure any outgroups are not removed.
-goodBins <- which(dfExtreme$order_name == "Anura" | 
-                  dfExtreme$order_name == "Rajiformes" |
-                  dfExtreme$order_name == "Rodentia" |
-                  dfExtreme$order_name == "Carcharhiniformes")
+# Make sure outgroups are not removed.
+goodBins <- which(dfExtreme$order_name == "Acanthuriformes")
 dfExtreme <- dfExtreme[-goodBins, ]
 extremeBins <- dfExtreme$bin_uri
 # If you decide to remove all from your data:
 dfAllSeqs <- dfAllSeqs[!dfAllSeqs$bin_uri %in% extremeBins, ]
 rm(extremeBins)
 
-
-### NEAREST NEIGHBOUR CHECK ###
-# Remove centroid sequences whose nearest neighbours are in a different order or 
-# family. 
+### OUTLIER CHECK ###
+# Remove centroid sequences whose genetic distances to all other sequences fall 
+# outside the typical range of genetic divergence for this group of organisms.
 # Convert each alignment to DNAbin format.
 dnaBinNN <- DNAStringSet(dfCheckAllSeqs$nucleotides)
 names(dnaBinNN) <- dfCheckAllSeqs$bin_uri
@@ -1624,76 +1051,90 @@ dnaBinNN <- as.DNAbin(dnaBinNN)
 # Then, we perform genetic distance determination with the TN93 model.
 geneticDistanceCentroid <- dist.dna(dnaBinNN, model = "TN93", as.matrix = TRUE, 
                                     pairwise.deletion = TRUE)
-mean(geneticDistanceCentroid)
-median(geneticDistanceCentroid)
-range(geneticDistanceCentroid)
-sd(geneticDistanceCentroid)
-# IQR
-lowerq = quantile(geneticDistanceCentroid)[2]
-upperq = quantile(geneticDistanceCentroid)[4]
-iqr = upperq - lowerq
-mild.threshold.upper = (iqr * 1.5) + upperq
-mild.threshold.lower = lowerq - (iqr * 1.5)
-
+# Using the IQR to detect outliers.
+lowerq <- quantile(geneticDistanceCentroid)[2]
+upperq <- quantile(geneticDistanceCentroid)[4]
+iqr <- upperq - lowerq
+mild.threshold.upper <- (iqr * 1.5) + upperq
 # Remove 0 values.
 geneticDistanceCentroid[geneticDistanceCentroid == 0] <- NA
+# Convert to dataframe format.
+dfOutlierCheck <- as.data.frame(geneticDistanceCentroid)
+# Identify BINs with no relatives within "typical" range of genetic divergence
+# (i.e. all of their genetic distances fall outside 1.5 x IQR upper threshold.)
+outliers <- apply(dfOutlierCheck, MARGIN = 1, 
+                  function(x) all(x > mild.threshold.upper))
+typical <- which(outliers == "FALSE")
+# Take a closer look.
+dfOutliers <- dfOutlierCheck[-typical, ]
+outliers <- row.names(dfOutliers)
+outliers <- which(dfAllSeqs$bin_uri == outliers)
+# Remove them from dfAllSeqs, if desired.
+dfAllSeqs <- dfAllSeqs[-outliers, ]
 
-test <- as.data.frame(geneticDistanceCentroid)
-# Identify BINs with no relatives within range of divergence.
-x <- apply(test, MARGIN = 1, function(x) all(x > 0.338))
-x <- which(x == "FALSE")
-test2 <- test[-x, ]
+# LEFT OFF HERE!
 
-# The nearest neighbour can be determined from the distance matrix alone.
+### NEAREST NEIGHBOUR CHECK ###
+# Remove centroid sequences whose nearest neighbours are in a different order or 
+# family. The nearest neighbour can be determined from the distance matrix alone.
 # It is the sequence with minimum pairwise distance to the sequence in question.
-result <- t(sapply(seq(nrow(geneticDistanceCentroid)), function(i) {
-  j <- which.min(geneticDistanceCentroid[i,])
+
+# FUNCTION: Identifies the nearest neighbour of each BIN.
+# Applying this function to geneticDistanceCentroid.
+NearestNeighbour <- t(sapply(seq(nrow(geneticDistanceCentroid)), function(i) {
+  # Identify the sequence with the minimum distance in the row (the nearest
+  # neighbour of i)
+  j <- which.min(geneticDistanceCentroid[i, ])
+  # Assign the name of the BIN and the name of its nearest neighbour to a 
+  # separate column.
   c(paste(rownames(geneticDistanceCentroid)[i], 
           colnames(geneticDistanceCentroid)[j], sep='/'), 
     geneticDistanceCentroid[i, j])
 }))
-
-require(reshape)
-result <- as.data.frame(result, stringsAsFactors = FALSE)
-result <- transform(result, V1 = colsplit(V1, split = "/", 
-                                          names = c('bin_uri', 
-                                                    'nearest_neighbour')))
-result$V2 <- as.numeric(result$V2)
-
-# Get family and order names of BINs and nearest neighbours.
-dfNN <- result$V1
-dfNN$distance <- result$V2
+# Convert to dataframe.
+NearestNeighbour <- as.data.frame(NearestNeighbour, stringsAsFactors = FALSE)
+# Split the columns using the transform() function.
+NearestNeighbour <- transform(NearestNeighbour,  V1 = colsplit(V1, split = "/", 
+                                           names = c('bin_uri', 
+                                                     'nearest_neighbour')))
+# Re-add the genetic distances to the dataframe.
+NearestNeighbour$V2 <- as.numeric(NearestNeighbour$V2)
+colnames(NearestNeighbour)[2] <- "pairwise_distance"
+# Get the family and order names of BINs and nearest neighbours.
+dfNN <- NearestNeighbour$V1
+dfNN$pairwise_distance <- NearestNeighbour$pairwise_distance
 bins <- as.character(dfNN$bin_uri)
 nn <- as.character(dfNN$nearest_neighbour)
-# Make dfs following these orders we can extract order and family names.
-bin_ord <- dfCheckAllSeqs[match(dfNN$bin_uri, dfCheckAllSeqs$bin_uri), ] 
+# Now extract the orders and families from dfAllSeqs.
+bin_ord <- dfAllSeqs[match(dfNN$bin_uri, dfCheckAllSeqs$bin_uri), ] 
 bin_orders <- bin_ord$order_name
 bin_families <- bin_ord$family_name
-nn_ord <- dfCheckAllSeqs[match(dfNN$nearest_neighbour, 
-                               dfCheckAllSeqs$bin_uri), ] 
+nn_ord <- dfAllSeqs[match(dfNN$nearest_neighbour, dfCheckAllSeqs$bin_uri), ] 
 nn_orders <- nn_ord$order_name
 nn_families <- nn_ord$family_name
-# Add these columns to the dfNN.
+# Add these columns to dfNN.
 dfNN$bin_order <- bin_orders
 dfNN$bin_family <- bin_families
 dfNN$nn_order <- nn_orders
 dfNN$nn_family <- nn_families
 dfNN <- setDT(dfNN)
-# Non matching orders.
+# Non-matching orders.
 nonmatchOrd <- which(dfNN$bin_order != dfNN$nn_order)
-# LOook closely.
+# Look closely.
 dfNonmatchOrd <- dfNN[nonmatchOrd, ]
-dfNonmatchOrd <- dfNonmatchOrd[which(distance < 0.05)]
-# Non matching fams.
+dfNonmatchOrd <- dfNonmatchOrd[which(pairwise_distance < 0.05)]
+# Remove these BINs.
+nonMatchOrdBins <- dfNonmatchOrd$bin_uri
+dfAllSeqs <- dfAllSeqs[!dfAllSeqs$bin_uri %in% nonMatchOrdBins, ]
+# Non-matching fams.
 nonmatchFam <- which(dfNN$bin_family != dfNN$nn_family)
 # LOook closely.
 dfNonmatchFam <- dfNN[nonmatchFam, ]
-dfNonmatchFam <- dfNonmatchFam[which(distance < 0.05)]
+dfNonmatchFam <- dfNonmatchFam[which(pairwise_distance < 0.05)]
 # Remove these BINs.
 nonMatchFamBins <- dfNonmatchFam$bin_uri
 # If you decide to remove all from your data:
 dfAllSeqs <- dfAllSeqs[!dfAllSeqs$bin_uri %in% nonMatchFamBins, ]
-
 
 # Now check for any neighbours under 0.05 in different ord or fam.
 # Subset out all close neighbour pairings.
@@ -1706,11 +1147,10 @@ closeNeighbours$bins <- as.character(closeNeighbours$bins)
 closeNeighbours$neighbour <- nn
 # Get family and order names of BINs and nearest neighbours.
 # Make dfs following these orders we can extract order and family names.
-bin_ord <- dfCheckAllSeqs[match(closeNeighbours$bins, dfCheckAllSeqs$bin_uri), ] 
+bin_ord <- dfAllSeqs[match(closeNeighbours$bins, dfAllSeqs$bin_uri), ] 
 bin_orders <- bin_ord$order_name
 bin_families <- bin_ord$family_name
-nn_ord <- dfCheckAllSeqs[match(closeNeighbours$neighbour, 
-                               dfCheckAllSeqs$bin_uri), ] 
+nn_ord <- dfAllSeqs[match(closeNeighbours$neighbour, dfAllSeqs$bin_uri), ] 
 nn_orders <- nn_ord$order_name
 nn_families <- nn_ord$family_name
 # Add these columns to the dfNN.
@@ -1719,7 +1159,6 @@ closeNeighbours$bin_family <- bin_families
 closeNeighbours$nn_order <- nn_orders
 closeNeighbours$nn_family <- nn_families
 closeNeighbours <- setDT(closeNeighbours)
-
 # Fill in missing data in bin columnn.
 # BINs columns.
 closeNeighbours <- closeNeighbours[order(closeNeighbours$bins), ]
@@ -1731,12 +1170,11 @@ closeNeighbours$bin_family <- na.locf(closeNeighbours$bin_family)
 closeNeighbours <- closeNeighbours[order(closeNeighbours$neighbour), ]
 closeNeighbours$nn_order <- na.locf(closeNeighbours$nn_order)
 closeNeighbours$nn_family <- na.locf(closeNeighbours$nn_family)
-
 # Non matching orders.
 nonmatchOrd <- which(closeNeighbours$bin_order != closeNeighbours$nn_order)
-# LOook closely.
-#dfNonmatchOrd <- dfNN[nonmatchOrd, ]
-#dfNonmatchOrd <- dfNonmatchOrd[which(distance < 0.05)]
+# Look closely.
+dfNonmatchOrd <- dfNN[nonmatchOrd, ]
+dfNonmatchOrd <- dfNonmatchOrd[which(pairwise_distance < 0.05)]
 # Non matching fams.
 nonmatchFam <- which(closeNeighbours$bin_family != closeNeighbours$nn_family)
 # LOook closely.
@@ -1744,11 +1182,10 @@ dfNonmatchFam <- closeNeighbours[nonmatchFam, ]  # Some ones I already removed!
 # If you decide to remove all from your data:
 dfAllSeqs <- dfAllSeqs[!dfAllSeqs$bin_uri %in% dfNonmatchFam$bins, ]
 
-
 # Align and trim dfAllSeqs again without the extreme BINs and conflicted BINs.
 dfCheck2AllSeqs <- refSeqTrim(dfAllSeqs)
 
-# If dfCheck2AllSeqs alignment acceptable, proceed with tree building!
+# If dfCheck2AllSeqs alignment acceptable, proceed!
 
 # Which outgroups made the cut? Remove them from MSA so I can build tree
 # just using the ingroup.
@@ -1757,7 +1194,6 @@ dfGoodOutgroups <- dfAllSeqs[dfAllSeqs$species_name %in% outgroupSpecies, ]
 outgroupBins <- unique(dfGoodOutgroups$species_name)
 # Remove the outgroups from dfCheck2AllSeqs.
 dfCheck3AllSeqs <- dfCheck2AllSeqs[!dfCheck2AllSeqs$bin_uri %in% outgroupBins, ]
-
 # Run the alignment without the outgroups.
 # Check over sequences/alignment, make sure it is in correct reading frame.
 dfCheck4AllSeqs <- refSeqTrim(dfCheck3AllSeqs)
@@ -1765,9 +1201,9 @@ dfCheck4AllSeqs <- refSeqTrim(dfCheck3AllSeqs)
 # Now run with the outgroups.
 goodOG <- which(dfAllSeqs$species_name == "Raja montagui" |
                 dfAllSeqs$species_name == "Raja polystigma" |
-                  dfAllSeqs$species_name == "Neoceratodus forsteri" |
-                  dfAllSeqs$species_name == "Castor fiber" |
-                  dfAllSeqs$species_name == "Cratogeomys perotensis")
+                dfAllSeqs$species_name == "Neoceratodus forsteri" |
+                dfAllSeqs$species_name == "Castor fiber" |
+                dfAllSeqs$species_name == "Cratogeomys perotensis")
 mergeOG <- dfAllSeqs[goodOG, ]
 # Add them back.
 dfCheck5AllSeqs <- rbind(dfCheck4AllSeqs, mergeOG)
@@ -1775,7 +1211,6 @@ dfCheck5AllSeqs <- rbind(dfCheck4AllSeqs, mergeOG)
 dfFinalAllSeqs <- refSeqTrim(dfCheck5AllSeqs)
 
 ################################################################################
-
 # CHECK THAT ALIGNMENT AND dfCheck2AllSeqs are the same.
 x <- read.fasta(file="withNOoutgroupsMAY23rd.fas")
 fish <- names(x)
@@ -1946,29 +1381,6 @@ c_data <- comparative.data(rootedWholeTree, dfMaxLength, "species_name")
 caperLength <- pgls(branchLength ~ Length.x + numberOfNodes, c_data, 
                     lambda = "ML")
 
-# TRAIT: Maximum weight.
-# Pagel's lambda. A test for phylogenetic signal.
-maximum_weight <- dfRegression$Weight
-names(maximum_weight) <- rootedWholeTree$tip.label
-sigWeight <- phylosig(rootedWholeTree, maximum_weight, method = "lambda", 
-                      test = TRUE)
-# Pruning tree.
-# Merge so can get branch length info for UV.
-dfWeight <- merge(dfWeight, dfRegression, by = "species_name")
-# Prune constrained tree so only those tips for lat are present.
-weightTree <- drop.tip(phy = rootedWholeTree, 
-                     tip = rootedWholeTree$tip.label[!rootedWholeTree$tip.label%in%dfWeight$species_name], 
-                     rooted = T)
-# Prune constrained tree so only those tips for lat are present.
-dfWeight <- dfWeight[match(weightTree$tip.label, dfWeight$species_name), ]
-dfWeight <- as.data.frame(dfWeight)
-row.names(dfWeight) <- dfWeight$species_name
-dfWeight <- dfWeight[, c(1:3, 5)]
-# Test using caper.
-c_data <- comparative.data(rootedWholeTree, dfWeight, "species_name")
-caperWeight <- pgls(branchLength ~ Weight.x + numberOfNodes, c_data, 
-                    lambda = "ML")
-
 # TRAIT: Longevity.
 # Pagel's lambda. A test for phylogenetic signal.
 longevity <- dfRegression$LongevityWild
@@ -1993,131 +1405,6 @@ fitLong <- gls(branchLength ~ LongevityWild.x + numberOfNodes,
 # Test using caper.
 c_data <- comparative.data(rootedWholeTree, dfLongWild, "species_name")
 caperLong <- pgls(branchLength ~ LongevityWild.x + numberOfNodes, c_data, 
-                  lambda = "ML")
-
-# TRAIT: Temp min.
-# Pagel's lambda. A test for phylogenetic signal.
-temp_min <- dfRegression$TempMin
-names(temp_min) <- rootedWholeTree$tip.label
-sigTempMin <- phylosig(rootedWholeTree, temp_min, method = "lambda", test = TRUE)
-# Pruning tree.
-# Merge so can get branch length info for UV.
-dfTempMin <- merge(dfTempMin, dfRegression, by = "species_name")
-# Prune constrained tree so only those tips for lat are present.
-tempMinTree <- drop.tip(phy = rootedWholeTree, 
-                          tip = rootedWholeTree$tip.label[!rootedWholeTree$tip.label%in%dfTempMin$species_name], 
-                        rooted = T)
-tiph <- diag(vcv.phylo(tempMinTree))
-dfTempMin <- dfTempMin[match(tempMinTree$tip.label, dfTempMin$species_name), ]
-dfTempMin <- as.data.frame(dfTempMin)
-row.names(dfTempMin) <- dfTempMin$species_name
-dfTempMin <- dfTempMin[, c(1:3, 5)]
-fitTempMin <- gls(branchLength.x ~ TempMin.x + numberOfNodes.x, 
-                  correlation=corPagel(value = 0, phy = tempMinTree),
-               weights=varFixed(~tiph), method = "ML", data = dfTempMin)
-# Test using caper.
-c_data <- comparative.data(rootedWholeTree, dfTempMin, "species_name")
-caperTempMin <- pgls(branchLength.x ~ TempMin.x + numberOfNodes.x, c_data, 
-                     lambda = "ML")
-
-# TRAIT: Temp max.
-# Pagel's lambda. A test for phylogenetic signal.
-temp_max <- dfRegression$TempMax
-names(temp_max) <- rootedWholeTree$tip.label
-sigTempMax <- phylosig(rootedWholeTree, temp_max, method = "lambda", 
-                       test = TRUE)
-# Pruning tree.
-# Merge so can get branch length info for UV.
-dfTempMax <- merge(dfTempMax, dfRegression, by = "species_name")
-# Prune constrained tree so only those tips for lat are present.
-tempMaxTree <- drop.tip(phy = rootedWholeTree, 
-                        tip = rootedWholeTree$tip.label[!rootedWholeTree$tip.label%in%dfTempMax$species_name], 
-                        rooted = T)
-tiph <- diag(vcv.phylo(tempMaxTree))
-dfTempMax <- dfTempMax[match(tempMaxTree$tip.label, dfTempMax$species_name), ]
-dfTempMax <- as.data.frame(dfTempMax)
-row.names(dfTempMax) <- dfTempMax$species_name
-dfTempMax <- dfTempMax[, c(1:3, 5)]
-fitTempMax <- gls(branchLength.x ~ TempMax.x + numberOfNodes.x, 
-                  correlation=corPagel(value = 0, phy = tempMaxTree),
-                  weights=varFixed(~tiph), method = "ML", data = dfTempMax)
-# Test using caper.
-c_data <- comparative.data(rootedWholeTree, dfTempMax, "species_name")
-caperTempMax <- pgls(branchLength.x ~ TempMax.x + numberOfNodes.x, c_data, 
-                     lambda = "ML")
-
-# TRAIT: Minimum depth
-# Pagel's lambda. A test for phylogenetic signal.
-shallow_depth <- dfRegression$DepthRangeShallow
-names(shallow_depth) <- rootedWholeTree$tip.label
-sigShallowDepth <- phylosig(rootedWholeTree, shallow_depth, method = "lambda", 
-                            test = TRUE)
-# Pruning tree.
-# Merge so can get branch length info for UV.
-dfDepthShallow <- merge(dfDepthShallow, dfRegression, by = "species_name")
-# Prune constrained tree so only those tips for lat are present.
-shallowTree <- drop.tip(phy = rootedWholeTree, 
-                        tip = rootedWholeTree$tip.label[!rootedWholeTree$tip.label%in%dfDepthShallow$species_name], 
-                        rooted = T)
-# Prune constrained tree so only those tips for lat are present.
-dfDepthShallow <- dfDepthShallow[match(shallowTree$tip.label, 
-                                       dfDepthShallow$species_name), ]
-dfDepthShallow <- as.data.frame(dfDepthShallow)
-row.names(dfDepthShallow) <- dfDepthShallow$species_name
-dfDepthShallow <- dfDepthShallow[, c(1:3, 5)]
-# Test using caper.
-c_data <- comparative.data(rootedWholeTree, dfDepthShallow, "species_name")
-caperShallow <- pgls(branchLength ~ DepthRangeShallow.x + numberOfNodes, c_data, 
-                     lambda = "ML")
-
-# TRAIT: Maximum depth
-# Pagel's lambda. A test for phylogenetic signal.
-deep_depth <- dfRegression$DepthRangeDeep
-names(deep_depth) <- rootedWholeTree$tip.label
-sigDeepDepth <- phylosig(rootedWholeTree, shallow_depth, method = "lambda", 
-                         test = TRUE)
-# Pruning tree.
-# Merge so can get branch length info for UV.
-dfDepthDeep <- merge(dfDepthDeep, dfRegression, by = "species_name")
-# Prune constrained tree so only those tips for lat are present.
-deepTree <- drop.tip(phy = rootedWholeTree, 
-                        tip = rootedWholeTree$tip.label[!rootedWholeTree$tip.label%in%dfDepthDeep$species_name], 
-                     rooted = T)
-# Prune constrained tree so only those tips for lat are present.
-dfDepthDeep <- dfDepthDeep[match(deepTree$tip.label, 
-                                 dfDepthDeep$species_name), ]
-dfDepthDeep <- as.data.frame(dfDepthDeep)
-row.names(dfDepthDeep) <- dfDepthDeep$species_name
-dfDepthDeep <- dfDepthDeep[, c(1:3, 5)]
-# Test using caper.
-c_data <- comparative.data(rootedWholeTree, dfDepthDeep, "species_name")
-caperDeep <- pgls(branchLength ~ DepthRangeDeep.x + numberOfNodes, c_data, 
-                  lambda = "ML")
-
-# TRAIT: Diet Troph
-# Pagel's lambda. A test for phylogenetic signal.
-diet_troph <- dfRegression$DietTroph
-names(diet_troph) <- rootedWholeTree$tip.label
-sigDiet <- phylosig(rootedWholeTree, diet_troph, method = "lambda", test = TRUE)
-# Pruning tree.
-# Merge so can get branch length info for UV.
-dfDietTroph <- merge(dfDietTroph, dfRegression, by = "species_name")
-# Prune constrained tree so only those tips for lat are present.
-dietTree <- drop.tip(phy = rootedWholeTree, 
-                    tip = rootedWholeTree$tip.label[!rootedWholeTree$tip.label%in%dfDietTroph$species_name], 
-                    rooted = T)
-tiph <- diag(vcv.phylo(dietTree))
-dfDietTroph <- dfDietTroph[match(dietTree$tip.label, 
-                                 dfDietTroph$species_name), ]
-dfDietTroph <- as.data.frame(dfDietTroph)
-row.names(dfDietTroph) <- dfDietTroph$species_name
-dfDietTroph <- dfDietTroph[, c(1:3, 5)]
-fitDiet <- gls(branchLength ~ DietTroph.x + numberOfNodes, 
-               correlation=corPagel(value = 0, phy = dietTree),
-              weights=varFixed(~tiph), method = "ML", data = dfDietTroph)
-# Test using caper.
-c_data <- comparative.data(rootedWholeTree, dfDietTroph, "species_name")
-caperDiet <- pgls(branchLength ~ DietTroph.x + numberOfNodes, c_data, 
                   lambda = "ML")
 
 # TRAIT: Age at maturity
@@ -2145,9 +1432,7 @@ c_data <- comparative.data(rootedWholeTree, dfAgeMaturity, "species_name")
 caperAge <- pgls(branchLength ~ age_at_maturity.x + numberOfNodes, c_data, 
                  lambda = "ML")
 
-
 # Discrete traits.
-
 # TRAIT: NERITIC
 # Make sure the order of the data matches the constrained tree.
 dfRegression <- dfRegression[match(rootedWholeTree$tip.label, 
@@ -2231,193 +1516,6 @@ caperBenthic <- pgls(branchLength ~ Benthic.x + numberOfNodes, c_data,
 # D metric for phylogenetic signal.
 sigBenthic <- phylo.d(dfBenthic, benthicTree, names.col = species_name, 
                       binvar = Benthic.x)
-
-# TRAIT: CORAL REEFS
-#coral_reefs <- dfRegression$CoralReefs
-#names(coral_reefs) <- rootedWholeTree$tip.label
-#fit <- fitDiscrete(rootedWholeTree, coral_reefs, transform = "lambda")
-#fit$opt$lambda
-# Make sure the order of the data matches the constrained tree.
-dfRegression <- dfRegression[match(rootedWholeTree$tip.label, dfRegression$species_name), ]
-# Merge so can get branch length info for UV.
-dfCoralReefs <- merge(dfCoralReefs, dfRegression, by = "species_name")
-# Prune constrained tree so only those tips for lat are present.
-coralReefsTree <- drop.tip(phy = rootedWholeTree, 
-                        tip = rootedWholeTree$tip.label[!rootedWholeTree$tip.label%in%dfCoralReefs$species_name], 
-                        rooted = T)
-dfCoralReefs <- dfCoralReefs[match(coralReefsTree$tip.label, 
-                                   dfCoralReefs$species_name), ]
-dfCoralReefs <- as.data.frame(dfCoralReefs)
-row.names(dfCoralReefs) <- dfCoralReefs$species_name
-dfCoralReefs <- dfCoralReefs[, c(1:3, 5)]
-# Relevel body shape as I want fusiform / normal to be the reference.
-dfCoralReefs$CoralReefs.x <- relevel(dfCoralReefs$CoralReefs.x, ref = "0")
-dfRegression$CoralReefs <- relevel(dfRegression$CoralReefs, ref = "0")
-# Try using caper.
-c_data <- comparative.data(rootedWholeTree, dfCoralReefs, "species_name")
-caperCoralReefs <- pgls(branchLength ~ CoralReefs.x + numberOfNodes, c_data, 
-                        lambda = "ML")
-# D metric for phylogenetic signal.
-sigCoral <- phylo.d(dfCoralReefs, coralReefsTree, names.col = species_name, 
-                    binvar = CoralReefs.x)
-
-# TRAIT: EPIPELAGIC
-#epipelagic <- dfRegression$Epipelagic
-#names(epipelagic) <- rootedWholeTree$tip.label
-#fit <- fitDiscrete(rootedWholeTree, epipelagic, transform = "lambda")
-#fit$opt$lambda
-# Make sure the order of the data matches the constrained tree.
-dfRegression <- dfRegression[match(rootedWholeTree$tip.label, 
-                                   dfRegression$species_name), ]
-# Merge so can get branch length info for UV.
-dfEpipelagic <- merge(dfEpipelagic, dfRegression, by = "species_name")
-# Prune constrained tree so only those tips for lat are present.
-epiTree <- drop.tip(phy = rootedWholeTree, 
-                           tip = rootedWholeTree$tip.label[!rootedWholeTree$tip.label%in%dfEpipelagic$species_name], 
-                    rooted = T)
-dfEpipelagic <- dfEpipelagic[match(epiTree$tip.label, 
-                                   dfEpipelagic$species_name), ]
-dfEpipelagic <- as.data.frame(dfEpipelagic)
-row.names(dfEpipelagic) <- dfEpipelagic$species_name
-dfEpipelagic <- dfEpipelagic[, c(1:3, 5)]
-# Relevel body shape as I want fusiform / normal to be the reference.
-dfEpipelagic$Epipelagic.x <- relevel(dfEpipelagic$Epipelagic.x, ref = "0")
-dfRegression$Epipelagic <- relevel(dfRegression$Epipelagic, ref = "0")
-# Try using caper.
-c_data <- comparative.data(rootedWholeTree, dfEpipelagic, "species_name")
-caperEpi <- pgls(branchLength ~ Epipelagic.x + numberOfNodes, c_data, 
-                 lambda = "ML")
-# D metric for phylogenetic signal.
-sigEpipelagic <- phylo.d(dfEpipelagic, epiTree, names.col = species_name, 
-                         binvar = Epipelagic.x)
-
-# TRAIT: MESOPELAGIC
-#mesopelagic <- dfRegression$Mesopelagic
-#names(epipelagic) <- rootedWholeTree$tip.label
-#fit <- fitDiscrete(rootedWholeTree, epipelagic, transform = "lambda")
-#fit$opt$lambda
-# Make sure the order of the data matches the constrained tree.
-dfRegression <- dfRegression[match(rootedWholeTree$tip.label, 
-                                   dfRegression$species_name), ]
-# Merge so can get branch length info for UV.
-dfMesopelagic <- merge(dfMesopelagic, dfRegression, by = "species_name")
-# Prune constrained tree so only those tips for lat are present.
-mesoTree <- drop.tip(phy = rootedWholeTree, 
-                    tip = rootedWholeTree$tip.label[!rootedWholeTree$tip.label%in%dfMesopelagic$species_name], 
-                    rooted = T)
-dfMesopelagic <- dfMesopelagic[match(mesoTree$tip.label, 
-                                     dfMesopelagic$species_name), ]
-dfMesopelagic <- as.data.frame(dfMesopelagic)
-row.names(dfMesopelagic) <- dfMesopelagic$species_name
-dfMesopelagic <- dfMesopelagic[, c(1:3, 5)]
-# Relevel body shape as I want fusiform / normal to be the reference.
-dfMesopelagic$Mesopelagic.x <- relevel(dfMesopelagic$Mesopelagic.x, ref = "0")
-dfRegression$Mesopelagic <- relevel(dfRegression$Mesopelagic, ref = "0")
-# Try using caper.
-c_data <- comparative.data(rootedWholeTree, dfMesopelagic, "species_name")
-caperMeso <- pgls(branchLength ~ Mesopelagic.x + numberOfNodes, c_data, lambda = "ML")
-# D metric for phylogenetic signal.
-sigMeso <- phylo.d(dfMesopelagic, mesoTree, names.col = species_name, binvar = Mesopelagic.x)
-
-# TRAIT: BATHYPELAGIC
-#bathypelagic <- dfRegression$Bathypelagic
-#names(bathypelagic) <- rootedWholeTree$tip.label
-#fit <- fitDiscrete(rootedWholeTree, bathypelagic, transform = "lambda")
-#fit$opt$lambda
-# Make sure the order of the data matches the constrained tree.
-dfRegression <- dfRegression[match(rootedWholeTree$tip.label, dfRegression$species_name), ]
-# Merge so can get branch length info for UV.
-dfBathypelagic <- merge(dfBathypelagic, dfRegression, by = "species_name")
-# Prune constrained tree so only those tips for lat are present.
-bathyTree <- drop.tip(phy = rootedWholeTree, 
-                     tip = rootedWholeTree$tip.label[!rootedWholeTree$tip.label%in%dfBathypelagic$species_name], rooted = T)
-dfBathypelagic <- dfBathypelagic[match(bathyTree$tip.label, dfBathypelagic$species_name), ]
-dfBathypelagic <- as.data.frame(dfBathypelagic)
-row.names(dfBathypelagic) <- dfBathypelagic$species_name
-dfBathypelagic <- dfBathypelagic[, c(1:3, 5)]
-# Relevel body shape as I want fusiform / normal to be the reference.
-dfBathypelagic$Bathypelagic.x <- relevel(dfBathypelagic$Bathypelagic.x, ref = "0")
-dfRegression$Bathypelagic <- relevel(dfRegression$Bathypelagic, ref = "0")
-# Try using caper.
-c_data <- comparative.data(rootedWholeTree, dfBathypelagic, "species_name")
-caperBathy <- pgls(branchLength ~ Bathypelagic.x + numberOfNodes, c_data, lambda = "ML")
-# D metric for phylogenetic signal.
-sigBathy <- phylo.d(dfBathypelagic, bathyTree, names.col = species_name, binvar = Bathypelagic.x)
-
-# TRAIT: MANGROVES
-#mangroves <- dfRegression$Mangroves
-#names(mangroves) <- rootedWholeTree$tip.label
-#fit <- fitDiscrete(rootedWholeTree, mangroves, transform = "lambda")
-#fit$opt$lambda
-# Make sure the order of the data matches the constrained tree.
-dfRegression <- dfRegression[match(rootedWholeTree$tip.label, dfRegression$species_name), ]
-# Merge so can get branch length info for UV.
-dfMangroves <- merge(dfMangroves, dfRegression, by = "species_name")
-# Prune constrained tree so only those tips for lat are present.
-mangrovesTree <- drop.tip(phy = rootedWholeTree, 
-                      tip = rootedWholeTree$tip.label[!rootedWholeTree$tip.label%in%dfMangroves$species_name], rooted = T)
-dfMangroves <- dfMangroves[match(mangrovesTree$tip.label, dfMangroves$species_name), ]
-dfMangroves <- as.data.frame(dfMangroves)
-row.names(dfMangroves) <- dfMangroves$species_name
-dfMangroves <- dfMangroves[, c(1:3, 5)]
-# Relevel body shape as I want fusiform / normal to be the reference.
-dfMangroves$Mangroves.x <- relevel(dfMangroves$Mangroves.x, ref = "0")
-dfRegression$Mangroves <- relevel(dfRegression$Mangroves, ref = "0")
-# Try using caper.
-c_data <- comparative.data(rootedWholeTree, dfMangroves, "species_name")
-caperMangroves <- pgls(branchLength ~ Mangroves.x + numberOfNodes, c_data, lambda = "ML")
-# D metric for phylogenetic signal.
-sigMangroves <- phylo.d(dfMangroves, mangrovesTree, names.col = species_name, binvar = Mangroves.x)
-
-# TRAIT: ESTUARIES
-#estuaries <- dfRegression$Estuaries
-#names(estuaries) <- rootedWholeTree$tip.label
-#fit <- fitDiscrete(rootedWholeTree, estuaries, transform = "lambda")
-#fit$opt$lambda
-# Make sure the order of the data matches the constrained tree.
-dfRegression <- dfRegression[match(rootedWholeTree$tip.label, dfRegression$species_name), ]
-# Merge so can get branch length info for UV.
-dfEstuaries <- merge(dfEstuaries, dfRegression, by = "species_name")
-# Prune constrained tree so only those tips for lat are present.
-estuariesTree <- drop.tip(phy = rootedWholeTree, 
-                      tip = rootedWholeTree$tip.label[!rootedWholeTree$tip.label%in%dfEstuaries$species_name], rooted = T)
-dfEstuaries <- dfEstuaries[match(estuariesTree$tip.label, dfEstuaries$species_name), ]
-dfEstuaries <- as.data.frame(dfEstuaries)
-row.names(dfEstuaries) <- dfEstuaries$species_name
-dfEstuaries <- dfEstuaries[, c(1:3, 5)]
-# Relevel body shape as I want fusiform / normal to be the reference.
-dfEstuaries$Estuaries.x <- relevel(dfEstuaries$Estuaries.x, ref = "0")
-dfRegression$Estuaries <- relevel(dfRegression$Estuaries, ref = "0")
-# Try using caper.
-c_data <- comparative.data(rootedWholeTree, dfEstuaries, "species_name")
-caperEstuaries <- pgls(branchLength ~ Estuaries.x + numberOfNodes, c_data, lambda = "ML")
-# D metric for phylogenetic signal.
-sigEstuaries <- phylo.d(dfEstuaries, estuariesTree, names.col = species_name, binvar = Estuaries.x)
-
-# TRAIT: SCHOOLING
-#schooling <- dfRegression$Schooling
-#names(schooling) <- rootedWholeTree$tip.label
-#fit <- fitDiscrete(rootedWholeTree, schooling, transform = "lambda")
-#fit$opt$lambda
-# Make sure the order of the data matches the constrained tree.
-dfRegression <- dfRegression[match(rootedWholeTree$tip.label, dfRegression$species_name), ]
-# Merge so can get branch length info for UV.
-dfSchooling <- merge(dfSchooling, dfRegression, by = "species_name")
-# Prune constrained tree so only those tips for lat are present.
-schoolingTree <- drop.tip(phy = rootedWholeTree, 
-                      tip = rootedWholeTree$tip.label[!rootedWholeTree$tip.label%in%dfSchooling$species_name], rooted = T)
-dfSchooling <- dfSchooling[match(schoolingTree$tip.label, dfSchooling$species_name), ]
-dfSchooling <- as.data.frame(dfSchooling)
-row.names(dfSchooling) <- dfSchooling$species_name
-dfSchooling <- dfSchooling[, c(1:3, 5)]
-# Relevel body shape as I want fusiform / normal to be the reference.
-dfSchooling$Schooling.x <- relevel(dfSchooling$Schooling.x, ref = "0")
-dfRegression$Schooling <- relevel(dfRegression$Schooling, ref = "0")
-# Try using caper.
-c_data <- comparative.data(rootedWholeTree, dfSchooling, "species_name")
-caperSchooling <- pgls(branchLength ~ Schooling.x + numberOfNodes, c_data, lambda = "ML")
-# D metric for phylogenetic signal.
-sigSchool <- phylo.d(dfSchooling, schoolingTree, names.col = species_name, binvar = Schooling.x)
 
 # TRAIT: LAKES
 #lakes <- dfRegression$Lakes
@@ -2507,101 +1605,6 @@ sigBsEel <- phylo.d(dfDummyBs, bodyTree, names.col = species_name, binvar = EelL
 sigBsElong <- phylo.d(dfDummyBs, bodyTree, names.col = species_name, binvar = Elongated)
 sigBsShort <- phylo.d(dfDummyBs, bodyTree, names.col = species_name, binvar = Short)
 
-# TRAIT: Freshwater
-#freshwater <- dfRegression$Fresh
-#names(freshwater) <- rootedWholeTree$tip.label
-#fit <- fitDiscrete(rootedWholeTree, freshwater, transform = "lambda")
-#fit$opt$lambda
-# Make sure the order of the data matches the constrained tree.
-dfRegression <- dfRegression[match(rootedWholeTree$tip.label, dfRegression$species_name), ]
-# Merge so can get branch length info for UV.
-dfFreshwater <- merge(dfFreshwater, dfRegression, by = "species_name")
-dfFreshwater <- dfFreshwater[sample(nrow(dfFreshwater), 4393), ]
-# Prune constrained tree so only those tips for lat are present.
-freshTree <- drop.tip(phy = rootedWholeTree, 
-                       tip = rootedWholeTree$tip.label[!rootedWholeTree$tip.label%in%dfFreshwater$species_name], rooted = T)
-dfFreshwater <- dfFreshwater[match(freshTree$tip.label, dfFreshwater$species_name), ]
-dfFreshwater <- as.data.frame(dfFreshwater)
-row.names(dfFreshwater) <- dfFreshwater$species_name
-dfFreshwater <- dfFreshwater[, c(1:2, 5, 7)]
-# Take random sample.
-# Relevel body shape as I want fusiform / normal to be the reference.
-dfFreshwater$Fresh.x <- relevel(dfFreshwater$Fresh.x, ref = "0")
-dfRegression$Fresh <- relevel(dfRegression$Fresh, ref = "0")
-# Try using caper.
-c_data <- comparative.data(rootedWholeTree, dfFreshwater, "species_name")
-caperFresh <- pgls(branchLength ~ Fresh.x + numberOfNodes, c_data, lambda = "ML")
-# D metric for phylogenetic signal.
-sigFresh <- phylo.d(dfFreshwater, freshTree, names.col = species_name, binvar = Fresh.x)
-
-# TRAIT: Saltwater
-#saltwater <- dfRegression$Saltwater
-#names(saltwater) <- rootedWholeTree$tip.label
-#fit <- fitDiscrete(rootedWholeTree, saltwater, transform = "lambda")
-#fit$opt$lambda
-# Make sure the order of the data matches the constrained tree.
-dfRegression <- dfRegression[match(rootedWholeTree$tip.label, dfRegression$species_name), ]
-# Merge so can get branch length info for UV.
-dfSaltwater <- merge(dfSaltwater, dfRegression, by = "species_name")
-dfSaltwater <- dfSaltwater[sample(nrow(dfSaltwater), 4393), ]
-# Prune constrained tree so only those tips for lat are present.
-saltTree <- drop.tip(phy = rootedWholeTree, 
-                      tip = rootedWholeTree$tip.label[!rootedWholeTree$tip.label%in%dfSaltwater$species_name], rooted = T)
-dfSaltwater <- dfSaltwater[match(saltTree$tip.label, dfSaltwater$species_name), ]
-dfSaltwater <- as.data.frame(dfSaltwater)
-row.names(dfSaltwater) <- dfSaltwater$species_name
-dfSaltwater <- dfSaltwater[, c(1:3, 5)]
-# Relevel body shape as I want fusiform / normal to be the reference.
-dfSaltwater$Saltwater.x <- relevel(dfSaltwater$Saltwater.x, ref = "0")
-dfRegression$Saltwater <- relevel(dfRegression$Saltwater, ref = "0")
-# Try using caper.
-c_data <- comparative.data(rootedWholeTree, dfSaltwater, "species_name")
-caperSalt <- pgls(branchLength ~ Saltwater.x + numberOfNodes, c_data, lambda = "ML")
-# D metric for phylogenetic signal.
-sigSalt <- phylo.d(dfSaltwater, saltTree, names.col = species_name, binvar = Saltwater.x)
-
-# TRAIT: Env temp
-# get rid of deep-water, too confusing
-deep_water <- which(dfEnvTemp$EnvTemp == "deep-water")
-dfEnvTemp <- dfEnvTemp[-deep_water,]
-dfEnvTemp$EnvTemp <- droplevels(dfEnvTemp$EnvTemp)
-#env_temp <- dfRegression$EnvTemp
-#names(env_temp) <- rootedWholeTree$tip.label
-#fit <- fitDiscrete(rootedWholeTree, env_temp, transform = "lambda")
-#fit$opt$lambda
-# Make sure the order of the data matches the constrained tree.
-dfRegression <- dfRegression[match(rootedWholeTree$tip.label, dfRegression$species_name), ]
-# Merge so can get branch length info for UV.
-dfEnvTemp <- merge(dfEnvTemp, dfRegression, by = "species_name")
-# Prune constrained tree so only those tips for lat are present.
-envTempTree <- drop.tip(phy = rootedWholeTree, 
-                     tip = rootedWholeTree$tip.label[!rootedWholeTree$tip.label%in%dfEnvTemp$species_name], rooted = T)
-dfEnvTemp <- dfEnvTemp[match(envTempTree$tip.label, dfEnvTemp$species_name), ]
-dfEnvTemp <- as.data.frame(dfEnvTemp)
-row.names(dfEnvTemp) <- dfEnvTemp$species_name
-dfEnvTemp <- dfEnvTemp[, c(1:3, 5)]
-# Relevel body shape as I want fusiform / normal to be the reference.
-dfEnvTemp$EnvTemp.x <- relevel(dfEnvTemp$EnvTemp.x, ref = "polar")
-dfRegression$EnvTemp <- relevel(dfRegression$EnvTemp, ref = "polar")
-# Try using caper.
-c_data <- comparative.data(rootedWholeTree, dfEnvTemp, "species_name")
-caperEnvTemp <- pgls(branchLength ~ EnvTemp.x + numberOfNodes, c_data, lambda = "ML")
-anovaEnvTemp <- anova.pgls.fixed(caperEnvTemp)
-# D metric for phylogenetic signal.
-# Need dummy variables first.
-dfDummyEnvTemp <- model.matrix(~ EnvTemp.x - 1, data=dfEnvTemp)
-row.names(dfDummyEnvTemp) <- dfEnvTemp$species_name
-dfDummyEnvTemp <- as.data.frame(dfDummyEnvTemp)
-dfDummyEnvTemp$species_name <- row.names(dfDummyEnvTemp)
-colnames(dfDummyEnvTemp)[1] <- "Polar"
-colnames(dfDummyEnvTemp)[2] <- "Subtropical"
-colnames(dfDummyEnvTemp)[3] <- "Temperate"
-colnames(dfDummyEnvTemp)[4] <- "Tropical"
-sigPolar <- phylo.d(dfDummyEnvTemp, envTempTree, names.col = species_name, binvar = Polar)
-sigTemperate <- phylo.d(dfDummyEnvTemp, envTempTree, names.col = species_name, binvar = Temperate)
-sigSubTrop <- phylo.d(dfDummyEnvTemp, envTempTree, names.col = species_name, binvar = Subtropical)
-sigTrop <- phylo.d(dfDummyEnvTemp, envTempTree, names.col = species_name, binvar = Tropical)
-
 # FeedingType
 #feeding_type <- dfRegression$FeedingType
 #names(feeding_type) <- rootedWholeTree$tip.label
@@ -2643,269 +1646,6 @@ sigFilt <- phylo.d(dfDummyFT, feedingTypeTree, names.col = species_name, binvar 
 sigGraze <- phylo.d(dfDummyFT, feedingTypeTree, names.col = species_name, binvar = GrazingPlants)
 sigSel <- phylo.d(dfDummyFT, feedingTypeTree, names.col = species_name, binvar = SelPlankton)
 sigVar <- phylo.d(dfDummyFT, feedingTypeTree, names.col = species_name, binvar = Variable)
-
-# Repro mode
-#repro_mode <- dfRegression$repro_mode
-#names(repro_mode) <- rootedWholeTree$tip.label
-#fit <- fitDiscrete(rootedWholeTree, repro_mode, transform = "lambda")
-#fit$opt$lambda
-# Make sure the order of the data matches the constrained tree.
-dfRegression <- dfRegression[match(rootedWholeTree$tip.label, dfRegression$species_name), ]
-# Merge so can get branch length info for UV.
-dfReproMode <- merge(dfReproMode, dfRegression, by = "species_name")
-# Prune constrained tree so only those tips for lat are present.
-reproModeTree <- drop.tip(phy = rootedWholeTree, 
-                            tip = rootedWholeTree$tip.label[!rootedWholeTree$tip.label%in%dfReproMode$species_name], rooted = T)
-dfReproMode <- dfReproMode[match(reproModeTree$tip.label, dfReproMode$species_name), ]
-dfReproMode <- as.data.frame(dfReproMode)
-row.names(dfReproMode) <- dfReproMode$species_name
-dfReproMode <- dfReproMode[, c(1:3, 5)]
-# Relevel body shape as I want fusiform / normal to be the reference.
-dfReproMode$repro_mode.x <- relevel(dfReproMode$repro_mode.x, ref = "dioecism")
-dfRegression$repro_mode <- relevel(dfRegression$repro_mode, ref = "dioecism")
-# Try using caper.
-c_data <- comparative.data(rootedWholeTree, dfReproMode, "species_name")
-caperReproMode <- pgls(branchLength ~ repro_mode.x + numberOfNodes, c_data, lambda = "ML")
-anovaReproMode <- anova.pgls.fixed(caperReproMode)
-# D metric for phylogenetic signal.
-# Need dummy variables first.
-dfDummyRM <- model.matrix(~ repro_mode.x - 1, data=dfReproMode)
-row.names(dfDummyRM) <- dfReproMode$species_name
-dfDummyRM <- as.data.frame(dfDummyRM)
-dfDummyRM$species_name <- row.names(dfDummyRM)
-colnames(dfDummyRM)[1] <- "Dioecism"
-colnames(dfDummyRM)[2] <- "Protandry"
-colnames(dfDummyRM)[3] <- "Protogyny"
-sigDio <- phylo.d(dfDummyRM, reproModeTree, names.col = species_name, binvar = Dioecism)
-sigProta <- phylo.d(dfDummyRM, reproModeTree, names.col = species_name, binvar = Protandry)
-sigProto <- phylo.d(dfDummyRM, reproModeTree, names.col = species_name, binvar = Protogyny)
-
-# Fertilization
-#fert <- dfRegression$fertilization
-#names(fert) <- rootedWholeTree$tip.label
-#fit <- fitDiscrete(rootedWholeTree, fert, transform = "lambda")
-#fit$opt$lambda
-# Make sure the order of the data matches the constrained tree.
-dfRegression <- dfRegression[match(rootedWholeTree$tip.label, dfRegression$species_name), ]
-# Merge so can get branch length info for UV.
-dfFert <- merge(dfFert, dfRegression, by = "species_name")
-# Prune constrained tree so only those tips for lat are present.
-fertTree <- drop.tip(phy = rootedWholeTree, 
-                          tip = rootedWholeTree$tip.label[!rootedWholeTree$tip.label%in%dfFert$species_name], rooted = T)
-dfFert <- dfFert[match(fertTree$tip.label, dfFert$species_name), ]
-dfFert <- as.data.frame(dfFert)
-row.names(dfFert) <- dfFert$species_name
-dfFert <- dfFert[, c(1:3, 5)]
-# Relevel body shape as I want fusiform / normal to be the reference.
-dfFert$fertilization.x <- relevel(dfFert$fertilization.x, ref = "external")
-dfRegression$fertilization <- relevel(dfRegression$fertilization, ref = "external")
-# Try using caper.
-c_data <- comparative.data(rootedWholeTree, dfFert, "species_name")
-caperFert <- pgls(branchLength ~ fertilization.x + numberOfNodes, c_data, lambda = "ML")
-anovaFert <- anova.pgls.fixed(caperFert)
-# D metric for phylogenetic signal.
-# Need dummy variables first.
-dfDummyFert <- model.matrix(~ fertilization.x - 1, data=dfFert)
-row.names(dfDummyFert) <- dfFert$species_name
-dfDummyFert <- as.data.frame(dfDummyFert)
-dfDummyFert$species_name <- row.names(dfDummyFert)
-colnames(dfDummyFert)[1] <- "External"
-colnames(dfDummyFert)[2] <- "BroodPouch"
-colnames(dfDummyFert)[3] <- "Internal"
-sigExt <- phylo.d(dfDummyFert, fertTree, names.col = species_name, binvar = External)
-sigBrood <- phylo.d(dfDummyFert, fertTree, names.col = species_name, binvar = BroodPouch)
-sigInt <- phylo.d(dfDummyFert, fertTree, names.col = species_name, binvar = Internal)
-
-# Reproductive guild I
-#rep_guild_1 <- dfRegression$rep_guild_1
-#names(rep_guild_1) <- rootedWholeTree$tip.label
-#fit <- fitDiscrete(rootedWholeTree, rep_guild_1, transform = "lambda")
-#fit$opt$lambda
-# Make sure the order of the data matches the constrained tree.
-dfRegression <- dfRegression[match(rootedWholeTree$tip.label, dfRegression$species_name), ]
-# Merge so can get branch length info for UV.
-dfRepGuild1 <- merge(dfRepGuild1, dfRegression, by = "species_name")
-# Prune constrained tree so only those tips for lat are present.
-repGuild1Tree <- drop.tip(phy = rootedWholeTree, 
-                     tip = rootedWholeTree$tip.label[!rootedWholeTree$tip.label%in%dfRepGuild1$species_name], rooted = T)
-dfRepGuild1 <- dfRepGuild1[match(repGuild1Tree$tip.label, dfRepGuild1$species_name), ]
-dfRepGuild1 <- as.data.frame(dfRepGuild1)
-row.names(dfRepGuild1) <- dfRepGuild1$species_name
-dfRepGuild1 <- dfRepGuild1[, c(1:3, 5)]
-# Relevel body shape as I want fusiform / normal to be the reference.
-dfRepGuild1$rep_guild_1.x <- relevel(dfRepGuild1$rep_guild_1.x, ref = "nonguarders")
-dfRegression$rep_guild_1 <- relevel(dfRegression$rep_guild_1, ref = "nonguarders")
-# Try using caper.
-c_data <- comparative.data(rootedWholeTree, dfRepGuild1, "species_name")
-caperRepGuild1 <- pgls(branchLength ~ rep_guild_1.x + numberOfNodes, c_data, lambda = "ML")
-anovaRepGuild1 <- anova.pgls.fixed(caperRepGuild1)
-# D metric for phylogenetic signal.
-# Need dummy variables first.
-dfDummyRP1 <- model.matrix(~ rep_guild_1.x - 1, data=dfRepGuild1)
-row.names(dfDummyRP1) <- dfRepGuild1$species_name
-dfDummyRP1 <- as.data.frame(dfDummyRP1)
-dfDummyRP1$species_name <- row.names(dfDummyRP1)
-colnames(dfDummyRP1)[1] <- "Nonguarders"
-colnames(dfDummyRP1)[2] <- "Bearers"
-colnames(dfDummyRP1)[3] <- "Guarders"
-sigNG <- phylo.d(dfDummyRP1, repGuild1Tree, names.col = species_name, binvar = Nonguarders)
-sigBear <- phylo.d(dfDummyRP1, repGuild1Tree, names.col = species_name, binvar = Bearers)
-sigG <- phylo.d(dfDummyRP1, repGuild1Tree, names.col = species_name, binvar = Guarders)
-
-# Reproductive guild II
-#rep_guild_2 <- dfRegression$rep_guild_2
-#names(rep_guild_2) <- rootedWholeTree$tip.label
-#fit <- fitDiscrete(rootedWholeTree, rep_guild_2, transform = "lambda")
-#fit$opt$lambda
-# Make sure the order of the data matches the constrained tree.
-dfRegression <- dfRegression[match(rootedWholeTree$tip.label, dfRegression$species_name), ]
-# Merge so can get branch length info for UV.
-dfRepGuild2 <- merge(dfRepGuild2, dfRegression, by = "species_name")
-# Prune constrained tree so only those tips for lat are present.
-repGuild2Tree <- drop.tip(phy = rootedWholeTree, 
-                          tip = rootedWholeTree$tip.label[!rootedWholeTree$tip.label%in%dfRepGuild2$species_name], rooted = T)
-dfRepGuild2 <- dfRepGuild2[match(repGuild2Tree$tip.label, dfRepGuild2$species_name), ]
-dfRepGuild2 <- as.data.frame(dfRepGuild2)
-row.names(dfRepGuild2) <- dfRepGuild2$species_name
-dfRepGuild2 <- dfRepGuild2[, c(1:3, 5)]
-# Relevel body shape as I want fusiform / normal to be the reference.
-dfRepGuild2$rep_guild_2.x <- relevel(dfRepGuild2$rep_guild_2.x, ref = "open water/substratum egg scatterers")
-dfRegression$rep_guild_2 <- relevel(dfRegression$rep_guild_2, ref = "open water/substratum egg scatterers")
-# Try using caper.
-c_data <- comparative.data(rootedWholeTree, dfRepGuild2, "species_name")
-caperRepGuild2 <- pgls(branchLength ~ rep_guild_2.x + numberOfNodes, c_data, lambda = "ML")
-anovaRepGuild2 <- anova.pgls.fixed(caperRepGuild2)
-# D metric for phylogenetic signal.
-# Need dummy variables first.
-dfDummyRP2 <- model.matrix(~ rep_guild_2.x - 1, data=dfRepGuild2)
-row.names(dfDummyRP2) <- dfRepGuild2$species_name
-dfDummyRP2 <- as.data.frame(dfDummyRP2)
-dfDummyRP2$species_name <- row.names(dfDummyRP2)
-colnames(dfDummyRP2)[1] <- "OpenWater"
-colnames(dfDummyRP2)[2] <- "BroodHiders"
-colnames(dfDummyRP2)[3] <- "ClutchTenders"
-colnames(dfDummyRP2)[4] <- "ExtBrooders"
-colnames(dfDummyRP2)[5] <- "IntLive"
-colnames(dfDummyRP2)[6] <- "Nesters"
-sigOW <- phylo.d(dfDummyRP2, repGuild2Tree, names.col = species_name, binvar = OpenWater)
-sigBH <- phylo.d(dfDummyRP2, repGuild2Tree, names.col = species_name, binvar = BroodHiders)
-sigCT <- phylo.d(dfDummyRP2, repGuild2Tree, names.col = species_name, binvar = ClutchTenders)
-sigEB <- phylo.d(dfDummyRP2, repGuild2Tree, names.col = species_name, binvar = ExtBrooders)
-sigIL <- phylo.d(dfDummyRP2, repGuild2Tree, names.col = species_name, binvar = IntLive)
-sigN <- phylo.d(dfDummyRP2, repGuild2Tree, names.col = species_name, binvar = Nesters)
-
-# Parental care
-#parental_care <- dfRegression$parental_care
-#names(parental_care) <- rootedWholeTree$tip.label
-#fit <- fitDiscrete(rootedWholeTree, parental_care, transform = "lambda")
-#fit$opt$lambda
-# Make sure the order of the data matches the constrained tree.
-dfRegression <- dfRegression[match(rootedWholeTree$tip.label, dfRegression$species_name), ]
-# Merge so can get branch length info for UV.
-dfParentalCare <- merge(dfParentalCare, dfRegression, by = "species_name")
-# Prune constrained tree so only those tips for lat are present.
-parentalCareTree <- drop.tip(phy = rootedWholeTree, 
-                          tip = rootedWholeTree$tip.label[!rootedWholeTree$tip.label%in%dfParentalCare$species_name], rooted = T)
-dfParentalCare <- dfParentalCare[match(parentalCareTree$tip.label, dfParentalCare$species_name), ]
-dfParentalCare <- as.data.frame(dfParentalCare)
-row.names(dfParentalCare) <- dfParentalCare$species_name
-dfParentalCare <- dfParentalCare[, c(1:3, 5)]
-# Relevel body shape as I want fusiform / normal to be the reference.
-dfParentalCare$parental_care.x <- relevel(dfParentalCare$parental_care.x, ref = "none")
-dfRegression$parental_care <- relevel(dfRegression$parental_care, ref = "none")
-# Try using caper.
-c_data <- comparative.data(rootedWholeTree, dfParentalCare, "species_name")
-caperParentalCare <- pgls(branchLength ~ numberOfNodes + parental_care.x, c_data, lambda = "ML")
-anovaParentalCare <- anova.pgls.fixed(caperParentalCare)
-# D metric for phylogenetic signal.
-# Need dummy variables first.
-dfDummyPC <- model.matrix(~ parental_care.x - 1, data=dfParentalCare)
-row.names(dfDummyPC) <- dfParentalCare$species_name
-dfDummyPC <- as.data.frame(dfDummyPC)
-dfDummyPC$species_name <- row.names(dfDummyPC)
-colnames(dfDummyPC)[1] <- "None"
-colnames(dfDummyPC)[2] <- "Biparental"
-colnames(dfDummyPC)[3] <- "Maternal"
-colnames(dfDummyPC)[4] <- "Paternal"
-sigNone <- phylo.d(dfDummyPC, parentalCareTree, names.col = species_name, binvar = None)
-sigBP <- phylo.d(dfDummyPC, parentalCareTree, names.col = species_name, binvar = Biparental)
-sigM <- phylo.d(dfDummyPC, parentalCareTree, names.col = species_name, binvar = Maternal)
-sigP <- phylo.d(dfDummyPC, parentalCareTree, names.col = species_name, binvar = Paternal)
-
-
-
-# Adult type swimming
-#adult_type <- dfRegression$adult_type
-#names(adult_type) <- rootedWholeTree$tip.label
-#fit <- fitDiscrete(rootedWholeTree, adult_type, transform = "lambda")
-#fit$opt$lambda
-# Make sure the order of the data matches the constrained tree.
-dfRegression <- dfRegression[match(rootedWholeTree$tip.label, dfRegression$species_name), ]
-# Merge so can get branch length info for UV.
-dfSwimmingType <- merge(dfSwimmingType, dfRegression, by = "species_name")
-# Prune constrained tree so only those tips for lat are present.
-swimmingTypeTree <- drop.tip(phy = rootedWholeTree, 
-                             tip = rootedWholeTree$tip.label[!rootedWholeTree$tip.label%in%dfSwimmingType$species_name], rooted = T)
-dfSwimmingType <- dfSwimmingType[match(swimmingTypeTree$tip.label, dfSwimmingType$species_name), ]
-dfSwimmingType <- as.data.frame(dfSwimmingType)
-row.names(dfSwimmingType) <- dfSwimmingType$species_name
-dfSwimmingType <- dfSwimmingType[, c(1:3, 5)]
-# Relevel body shape as I want fusiform / normal to be the reference.
-dfSwimmingType$adult_type.x <- relevel(dfSwimmingType$adult_type.x, ref = "movements of body and/or caudal fin")
-dfRegression$adult_type <- relevel(dfRegression$adult_type, ref = "movements of body and/or caudal fin")
-# Try using caper.
-c_data <- comparative.data(rootedWholeTree, dfSwimmingType, "species_name")
-caperSwimmingType <- pgls(branchLength ~ adult_type.x + numberOfNodes, c_data, lambda = "ML")
-anovaSwimmingType <- anova.pgls.fixed(caperSwimmingType)
-# D metric for phylogenetic signal.
-# Need dummy variables first.
-dfDummySwim <- model.matrix(~ adult_type.x - 1, data = dfSwimmingType)
-row.names(dfDummySwim) <- dfSwimmingType$species_name
-dfDummySwim <- as.data.frame(dfDummySwim)
-dfDummySwim$species_name <- row.names(dfDummySwim)
-colnames(dfDummySwim)[1] <- "Movements"
-colnames(dfDummySwim)[2] <- "Oscillation"
-colnames(dfDummySwim)[3] <- "Undulation"
-sigMove <- phylo.d(dfDummySwim, swimmingTypeTree, names.col = species_name, binvar = Movements)
-sigOsc <- phylo.d(dfDummySwim, swimmingTypeTree, names.col = species_name, binvar = Oscillation)
-sigUnd <- phylo.d(dfDummySwim, swimmingTypeTree, names.col = species_name, binvar = Undulation)
-
-
-# Position of mouth
-#pos_of_mouth <- dfRegression$pos_of_mouth
-#names(pos_of_mouth) <- rootedWholeTree$tip.label
-#fit <- fitDiscrete(rootedWholeTree, pos_of_mouth, transform = "lambda")
-#fit$opt$lambda
-# Make sure the order of the data matches the constrained tree.
-dfRegression <- dfRegression[match(rootedWholeTree$tip.label, dfRegression$species_name), ]
-# Merge so can get branch length info for UV.
-dfPosMouth <- merge(dfPosMouth, dfRegression, by = "species_name")
-# Prune constrained tree so only those tips for lat are present.
-posMouthTree <- drop.tip(phy = rootedWholeTree, 
-                             tip = rootedWholeTree$tip.label[!rootedWholeTree$tip.label%in%dfPosMouth$species_name], rooted = T)
-dfPosMouth <- dfPosMouth[match(posMouthTree$tip.label, dfPosMouth$species_name), ]
-dfPosMouth <- as.data.frame(dfPosMouth)
-row.names(dfPosMouth) <- dfPosMouth$species_name
-dfPosMouth <- dfPosMouth[, c(1:3, 5)]
-# Relevel body shape as I want fusiform / normal to be the reference.
-dfPosMouth$pos_of_mouth <- relevel(dfPosMouth$pos_of_mouth, ref = "terminal")
-dfRegression$pos_of_mouth <- relevel(dfRegression$pos_of_mouth, ref = "terminal")
-# Try using caper.
-c_data <- comparative.data(rootedWholeTree, dfPosMouth, "species_name")
-caperPosMouth <- pgls(branchLength ~ pos_of_mouth + numberOfNodes, c_data, lambda = "ML")
-anovaPosMouth <- anova.pgls.fixed(caperPosMouth)
-# D metric for phylogenetic signal.
-# Need dummy variables first.
-dfDummyMouth <- model.matrix(~ pos_of_mouth - 1, data=dfPosMouth)
-row.names(dfDummyMouth) <- dfPosMouth$species_name
-dfDummyMouth <- as.data.frame(dfDummyMouth)
-dfDummyMouth$species_name <- row.names(dfDummyMouth)
-colnames(dfDummyMouth)[1] <- "Inferior"
-colnames(dfDummyMouth)[2] <- "Superior"
-colnames(dfDummyMouth)[3] <- "Terminal"
-sigInferior <- phylo.d(dfDummyMouth, posMouthTree, names.col = species_name, binvar = Inferior)
-sigTerminal <- phylo.d(dfDummyMouth, posMouthTree, names.col = species_name, binvar = Superior)
-sigSuperior <- phylo.d(dfDummyMouth, posMouthTree, names.col = species_name, binvar = Terminal)
 
 # Manual stepwise model selection. Lowest BIC value.
 # First, get a dataframe of only those traits I am considering.
@@ -3038,8 +1778,6 @@ null <- pgls(branchLength ~ numberOfNodes, data=c_data, lambda="ML")
 anova(null, full, test="F")  # As a whole predictors are significant.
 summary(full)$coefficients
 
-
-
 ### THIRD CODON POSITION: CONSTRAINED ###
 # Read in the tree.
 rootedThirdTree <- read.tree(file = "RAxML_bestTree.Third.PARTITION.1")
@@ -3125,27 +1863,6 @@ dfLongWild <- dfLongWild[, c(1:2, 5, 7)]
 c_data <- comparative.data(rootedWholeTree, dfLongWild, "species_name")
 caperLong <- pgls(branchLength.y ~ LongevityWild.x + numberOfNodes.y, c_data, lambda = "ML")
 
-# TRAIT: Temp min.
-dfTempMin <- merge(dfTempMin, dfThirdRegression, by = "species_name")
-dfTempMin <- dfTempMin[, c(1:2, 5, 7)]
-# Test using caper.
-c_data <- comparative.data(rootedWholeTree, dfTempMin, "species_name")
-caperTempMin <- pgls(branchLength ~ TempMin.x + numberOfNodes, c_data, lambda = "ML")
-
-# TRAIT: Temp max.
-dfTempMax <- merge(dfTempMax, dfThirdRegression, by = "species_name")
-dfTempMax <- dfTempMax[, c(1:2, 5, 7)]
-# Test using caper.
-c_data <- comparative.data(rootedWholeTree, dfTempMax, "species_name")
-caperTempMax <- pgls(branchLength ~ TempMax.x + numberOfNodes, c_data, lambda = "ML")
-
-# TRAIT: Minimum depth
-dfDepthShallow <- merge(dfDepthShallow, dfThirdRegression, by = "species_name")
-dfDepthShallow <- dfDepthShallow[, c(1:2, 5, 7)]
-# Test using caper.
-c_data <- comparative.data(rootedWholeTree, dfDepthShallow, "species_name")
-caperShallow <- pgls(branchLength.y ~ DepthRangeShallow.x + numberOfNodes.y, c_data, lambda = "ML")
-
 # TRAIT: Maximum depth
 # Merge so can get branch length info for third codon.
 dfDepthDeep <- merge(dfDepthDeep, dfThirdRegression, by = "species_name")
@@ -3153,14 +1870,6 @@ dfDepthDeep <- dfDepthDeep[, c(1:2, 5, 7)]
 # Test using caper.
 c_data <- comparative.data(rootedWholeTree, dfDepthDeep, "species_name")
 caperDeep <- pgls(branchLength.y ~ DepthRangeDeep.x + numberOfNodes.y, c_data, lambda = "ML")
-
-# TRAIT: Diet Troph
-# Merge so can get branch length info for third codon.
-dfDietTroph <- merge(dfDietTroph, dfThirdRegression, by = "species_name")
-dfDietTroph <- dfDietTroph[, c(1:2, 5, 7)]
-# Test using caper.
-c_data <- comparative.data(rootedWholeTree, dfDietTroph, "species_name")
-caperDiet <- pgls(branchLength.y ~ DietTroph.x + numberOfNodes.y, c_data, lambda = "ML")
 
 # TRAIT: Age at maturity
 # Merge so can get branch length info for third codon.
@@ -3170,10 +1879,7 @@ dfAgeMaturity <- dfAgeMaturity[, c(1:3, 5)]
 c_data <- comparative.data(rootedWholeTree, dfAgeMaturity, "species_name")
 caperAge <- pgls(branchLength.y ~ age_at_maturity.x + numberOfNodes.y, c_data, lambda = "ML")
 
-
-
 # Discrete traits.
-
 # TRAIT: NERITIC
 # Merge so can get branch length info for third codon.
 dfNeritic <- merge(dfNeritic, dfThirdRegression, by = "species_name")
@@ -3190,7 +1896,6 @@ dfOceanic <- dfOceanic[, c(1:2, 5, 7)]
 c_data <- comparative.data(rootedWholeTree, dfOceanic, "species_name")
 caperOceanic <- pgls(branchLength.y ~ Oceanic.x + numberOfNodes.y, c_data, lambda = "ML")
 
-
 # TRAIT: BENTHIC
 # Merge so can get branch length info for third codon.
 dfBenthic <- merge(dfBenthic, dfThirdRegression, by = "species_name")
@@ -3198,63 +1903,6 @@ dfBenthic <- dfBenthic[, c(1:2, 5, 7)]
 # Test using caper.
 c_data <- comparative.data(rootedWholeTree, dfBenthic, "species_name")
 caperBenthic <- pgls(branchLength.y ~ Benthic.x + numberOfNodes.y, c_data, lambda = "ML")
-
-
-# TRAIT: CORAL REEFS
-# Merge so can get branch length info for third codon.
-dfCoralReefs <- merge(dfCoralReefs, dfThirdRegression, by = "species_name")
-dfCoralReefs <- dfCoralReefs[, c(1:2, 5, 7)]
-# Test using caper.
-c_data <- comparative.data(rootedWholeTree, dfCoralReefs, "species_name")
-caperCoral <- pgls(branchLength.y ~ CoralReefs.x + numberOfNodes.y, c_data, lambda = "ML")
-
-# TRAIT: EPIPELAGIC
-# Merge so can get branch length info for third codon.
-dfEpipelagic <- merge(dfEpipelagic, dfThirdRegression, by = "species_name")
-dfEpipelagic <- dfEpipelagic[, c(1:2, 5, 7)]
-# Test using caper.
-c_data <- comparative.data(rootedWholeTree, dfEpipelagic, "species_name")
-caperEpi <- pgls(branchLength.y ~ Epipelagic.x + numberOfNodes.y, c_data, lambda = "ML")
-
-# TRAIT: MESOPELAGIC
-# Merge so can get branch length info for third codon.
-dfMesopelagic <- merge(dfMesopelagic, dfThirdRegression, by = "species_name")
-dfMesopelagic <- dfMesopelagic[, c(1:2, 5, 7)]
-# Test using caper.
-c_data <- comparative.data(rootedWholeTree, dfMesopelagic, "species_name")
-caperMeso <- pgls(branchLength.y ~ Mesopelagic.x + numberOfNodes.y, c_data, lambda = "ML")
-
-# TRAIT: BATHYPELAGIC
-# Merge so can get branch length info for third codon.
-dfBathypelagic <- merge(dfBathypelagic, dfThirdRegression, by = "species_name")
-dfBathypelagic <- dfBathypelagic[, c(1:2, 5, 7)]
-# Test using caper.
-c_data <- comparative.data(rootedWholeTree, dfBathypelagic, "species_name")
-caperBathy <- pgls(branchLength.y ~ Bathypelagic.x + numberOfNodes.y, c_data, lambda = "ML")
-
-# TRAIT: MANGROVES
-# Merge so can get branch length info for third codon.
-dfMangroves <- merge(dfMangroves, dfThirdRegression, by = "species_name")
-dfMangroves <- dfMangroves[, c(1:2, 5, 7)]
-# Test using caper.
-c_data <- comparative.data(rootedWholeTree, dfMangroves, "species_name")
-caperMangroves <- pgls(branchLength.y ~ Mangroves.x + numberOfNodes.y, c_data, lambda = "ML")
-
-# TRAIT: ESTUARIES
-# Merge so can get branch length info for third codon.
-dfEstuaries <- merge(dfEstuaries, dfThirdRegression, by = "species_name")
-dfEstuaries <- dfEstuaries[, c(1:2, 5, 7)]
-# Test using caper.
-c_data <- comparative.data(rootedWholeTree, dfEstuaries, "species_name")
-caperEstuaries <- pgls(branchLength.y ~ Estuaries.x + numberOfNodes.y, c_data, lambda = "ML")
-
-# TRAIT: SCHOOLING
-# Merge so can get branch length info for third codon.
-dfSchooling <- merge(dfSchooling, dfThirdRegression, by = "species_name")
-dfSchooling <- dfSchooling[, c(1:2, 5, 7)]
-# Test using caper.
-c_data <- comparative.data(rootedWholeTree, dfSchooling, "species_name")
-caperSchooling <- pgls(branchLength.y ~ Schooling.x + numberOfNodes.y, c_data, lambda = "ML")
 
 # TRAIT: LAKES
 # Merge so can get branch length info for third codon.
@@ -3283,36 +1931,6 @@ c_data <- comparative.data(rootedWholeTree, dfBodyShapeI, "species_name")
 caperBodyShapeI <- pgls(branchLength.y ~ BodyShapeI.x + numberOfNodes.y, c_data, lambda = "ML")
 anovaBS <- anova.pgls.fixed(caperBodyShapeI)
 
-# TRAIT: Freshwater
-# Merge so can get branch length info for third codon.
-dfFreshwater <- merge(dfFreshwater, dfThirdRegression, by = "species_name")
-dfFreshwater <- dfFreshwater[, c(1:2, 5, 7)]
-dfFreshwater <- dfFreshwater[sample(nrow(dfFreshwater), 4393), ]
-# Test using caper.
-c_data <- comparative.data(rootedWholeTree, dfFreshwater, "species_name")
-caperFresh <- pgls(branchLength ~ Fresh.x + numberOfNodes, c_data, lambda = "ML")
-
-# TRAIT: Saltwater
-# Merge so can get branch length info for third codon.
-dfSaltwater <- merge(dfSaltwater, dfThirdRegression, by = "species_name")
-dfSaltwater <- dfSaltwater[, c(1:4)]
-# Relevel body shape as I want fusiform / normal to be the reference.
-dfSaltwater$Saltwater.x <- relevel(dfSaltwater$Saltwater.x, ref = "0")
-dfSaltwater <- dfSaltwater[sample(nrow(dfSaltwater), 2000), ]
-
-# Test using caper.
-c_data <- comparative.data(rootedWholeTree, dfSaltwater, "species_name")
-caperSaltwater <- pgls(branchLength.y ~ Saltwater.x + numberOfNodes.y, c_data, lambda = "ML")
-
-# TRAIT: Env temp
-# Merge so can get branch length info for third codon.
-dfEnvTemp <- merge(dfEnvTemp, dfThirdRegression, by = "species_name")
-dfEnvTemp <- dfEnvTemp[, c(1:4)]
-# Test using caper.
-c_data <- comparative.data(rootedWholeTree, dfEnvTemp, "species_name")
-caperEnvTemp <- pgls(branchLength.y ~ EnvTemp.x + numberOfNodes.y, c_data, lambda = "ML")
-anovaET <- anova.pgls.fixed(caperEnvTemp)
-
 # FeedingType
 # Merge so can get branch length info for third codon.
 dfFeedingType <- merge(dfFeedingType, dfThirdRegression, by = "species_name")
@@ -3321,73 +1939,6 @@ dfFeedingType <- dfFeedingType[, c(1:2, 5, 7)]
 c_data <- comparative.data(rootedWholeTree, dfFeedingType, "species_name")
 caperFeedingType <- pgls(branchLength.y ~ FeedingType.x + numberOfNodes.y, c_data, lambda = "ML")
 anovaFT <- anova.pgls.fixed(caperFeedingType)
-
-# Repro mode
-# Merge so can get branch length info for third codon.
-dfReproMode <- merge(dfReproMode, dfThirdRegression, by = "species_name")
-dfReproMode <- dfReproMode[, c(1:3, 5)]
-dfReproMode <- as.data.frame(dfReproMode)
-dfReproMode <- dfReproMode[sample(nrow(dfReproMode), 1692), ]
-# Test using caper.
-c_data <- comparative.data(rootedWholeTree, dfReproMode, "species_name")
-caperReproMode <- pgls(branchLength ~ repro_mode.x + numberOfNodes, c_data, lambda = "ML")
-anovaRM <- anova.pgls.fixed(caperReproMode)
-
-# Fertilization
-# Merge so can get branch length info for third codon.
-dfFert <- merge(dfFert, dfThirdRegression, by = "species_name")
-dfFert <- dfFert[, c(1:2, 5, 7)]
-# Test using caper.
-c_data <- comparative.data(rootedWholeTree, dfFert, "species_name")
-caperFert <- pgls(branchLength ~ fertilization.x + numberOfNodes, c_data, lambda = "ML")
-anovaFert <- anova.pgls.fixed(caperFert)
-
-# Reproductive guild I
-# Merge so can get branch length info for third codon.
-dfRepGuild1 <- merge(dfRepGuild1, dfThirdRegression, by = "species_name")
-dfRepGuild1 <- dfRepGuild1[, c(1:2, 5, 7)]
-# Test using caper.
-c_data <- comparative.data(rootedWholeTree, dfRepGuild1, "species_name")
-caperRepGuild1 <- pgls(branchLength.y ~ rep_guild_1.x + numberOfNodes.y, c_data, lambda = "ML")
-anovaRG1 <- anova.pgls.fixed(caperRepGuild1)
-
-# Reproductive guild II
-dfRepGuild2 <- merge(dfRepGuild2, dfThirdRegression, by = "species_name")
-dfRepGuild2 <- dfRepGuild2[, c(1:2, 5, 7)]
-# Test using caper.
-c_data <- comparative.data(rootedWholeTree, dfRepGuild2, "species_name")
-caperRepGuild2 <- pgls(branchLength.y ~ rep_guild_2.x + numberOfNodes.y, c_data, lambda = "ML")
-anovaRG2 <- anova.pgls.fixed(caperRepGuild2)
-
-# Parental care
-dfParentalCare <- merge(dfParentalCare, dfThirdRegression, by = "species_name")
-dfParentalCare <- dfParentalCare[, c(1:2, 5, 7)]
-dfParentalCare <- as.data.frame(dfParentalCare)
-# Relevel body shape as I want fusiform / normal to be the reference.
-dfParentalCare$parental_care.x <- relevel(dfParentalCare$parental_care.x, ref = "none")
-# Test using caper.
-c_data <- comparative.data(rootedWholeTree, dfParentalCare, "species_name")
-caperParentalCare <- pgls(branchLength.y ~ parental_care.x + numberOfNodes.y, c_data, lambda = "ML")
-anovaPC <- anova.pgls.fixed(caperParentalCare)
-
-# Adult type swimming
-dfSwimmingType <- merge(dfSwimmingType, dfThirdRegression, by = "species_name")
-dfSwimmingType <- dfSwimmingType[, c(1:2, 5, 7)]
-# Test using caper.
-c_data <- comparative.data(rootedWholeTree, dfSwimmingType, "species_name")
-caperSwimmingType <- pgls(branchLength.y ~ adult_type.x + numberOfNodes.y, c_data, lambda = "ML")
-anovaST <- anova.pgls.fixed(caperSwimmingType)
-
-# Position of mouth
-dfPosMouth <- merge(dfPosMouth, dfThirdRegression, by = "species_name")
-dfPosMouth <- dfPosMouth[, c(1:2, 5, 7)]
-# Relevel body shape as I want fusiform / normal to be the reference.
-dfPosMouth$pos_of_mouth <- relevel(dfPosMouth$pos_of_mouth, ref = "terminal")
-# Test using caper.
-c_data <- comparative.data(rootedWholeTree, dfPosMouth, "species_name")
-caperPosMouth <- pgls(branchLength.y ~ pos_of_mouth + numberOfNodes.y, c_data, lambda = "ML")
-anovaPM <- anova.pgls.fixed(caperPosMouth)
-
 
 # Manual stepwise model selection. Lowest BIC value.
 # First, get a dataframe of only those traits I am considering.
@@ -3466,17 +2017,9 @@ range(dfMultivariateCut$Length)
 hist(dfMultivariateCut$DepthRangeDeep)
 range(dfMultivariateCut$DepthRangeDeep)
 
-table(dfMultivariateCut$Saltwater)
-
 table(dfMultivariateCut$Lakes)
 
-table(dfMultivariateCut$CoralReefs)
-
 table(dfMultivariateCut$BodyShapeI)
-
-table(dfMultivariateCut$Mangroves)
-
-table(dfMultivariateCut$Mesopelagic)
 
 hist(dfMultivariateCut$age_at_maturity)
 range(dfMultivariateCut$age_at_maturity)
@@ -3527,48 +2070,12 @@ summary(bg)
 null <- pgls(branchLength ~ numberOfNodes, data=c_data, lambda="ML")
 anova(null, full, test="F")  # As a whole predictors are significant.
 
-
-# Removal of outliers with studentized residuals >?3.
-# Adapted from: http://www.anthrotree.info/wiki/pages/w5j9m8/7.5.html.
-res <- residuals(full, phylo = TRUE) # Extracts phylogenetic residuals from the pgls model.
-res <- res/sqrt(var(res))[1] # Standardizes residuals by sqrt of their variance.
-rownames(res) <- rownames(full$residuals) # Matches the residuals up with the row name.
-rownames(res)[(abs(res) > 3)] # Gives the names of the outliers.
-# Remove if any outliers.
-cDat <- cDat[-which(abs(res) > 3), ]
-dfRegression <- dfRegression[-which(abs(res) > 3), ]
-WholeConstrainedMLtreeMV <- drop.tip(phy = WholeConstrainedMLtreeMV, 
-                   tip = WholeConstrainedMLtreeMV$tip.label[!WholeConstrainedMLtreeMV$tip.label%in%as.character(dfRegression$species_name)], rooted = T)
-str(WholeConstrainedMLtreeMV)
-full2 <- pgls(branchLength ~ numberOfNodes + endemic + salinity_tolerance + env_salinity_level 
-              + median_lat + operculum_present + body_shape_I + max_depth + Neritic + 
-                Oceanic + Estuaries + Mangroves + Stream + Lakes + Benthic + Macrophyte + SeaGrassBeds
-              + CoralReefs + temp_surface + repro_mode
-              + FoodTroph + rep_guild_1, data = cDat, 
-              lambda = "ML")
-# Look at the plots again.
-par(mar = rep(2, 4))
-hist(full2$phyres)
-qqnorm(full2$phyres)
-qqline(full2$phyres)
-# Inspect phylogenetic residuals for homogeneity.
-plot(x = fitted(full2), y = full2$phyres, pch = 19)
-#diagnostics.plot(full2)
-summary(full2)
-
-
 # PLOTS!
 # Plot branch length vs. median lat.
 plot(branchLength ~ log(Length.x), dfMaxLength, pch = 19, 
      xlab = "Log(Maximum length (cm))", ylab = "Branch length")
-
-rm <- which(df$species_name == "Trichomycterus diabolus" |
-            dfLatitude$species_name == "Echinorhinus cookei")
-dfLatitude <- dfLatitude[-rm,]
-
 lm(dfDepthDeep$branchLength ~ dfDepthDeep$DepthRangeDeep.x)
 abline(a = 1.108e+00, b = -0.0000018, col = "red")
-
 with(dfLakes, plot(branchLength ~ Lakes.x, xlab = "Presence/absence in lakes",
                         ylab = "Branch length", 
                         main = " "))

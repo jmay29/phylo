@@ -1010,7 +1010,6 @@ dfCheckAllSeqs <- refSeqTrim(dfAllSeqs)
 # Here, extremely gappy/ungappy sequences are removed. These sequences are 
 # assumed to contribute to misalignment of the sequences or may even be 
 # pseudogenes. Manually checking of the alignment is recommended.
-
 # This will give the number of positions where an *internal* N or gap is found 
 # for each sequence.
 internalGaps <- sapply(regmatches(dfCheckAllSeqs$nucleotides, 
@@ -1037,7 +1036,8 @@ dfExtreme <- dfCheckAllSeqs[extremeBins, ] # Need BIN names not index numbers.
 goodBins <- which(dfExtreme$order_name == "Acanthuriformes")
 dfExtreme <- dfExtreme[-goodBins, ]
 extremeBins <- dfExtreme$bin_uri
-# If you decide to remove all from your data:
+# Remove the gappy sequences from dfAllSeqs as we will be retrimming these 
+# sequences again once troublesome cases are removed.
 dfAllSeqs <- dfAllSeqs[!dfAllSeqs$bin_uri %in% extremeBins, ]
 rm(extremeBins)
 
@@ -1056,7 +1056,7 @@ lowerq <- quantile(geneticDistanceCentroid)[2]
 upperq <- quantile(geneticDistanceCentroid)[4]
 iqr <- upperq - lowerq
 mild.threshold.upper <- (iqr * 1.5) + upperq
-# Remove 0 values.
+# Remove 0 values (when a BIN is compared to itself - the diagonal values).
 geneticDistanceCentroid[geneticDistanceCentroid == 0] <- NA
 # Convert to dataframe format.
 dfOutlierCheck <- as.data.frame(geneticDistanceCentroid)
@@ -1069,10 +1069,9 @@ typical <- which(outliers == "FALSE")
 dfOutliers <- dfOutlierCheck[-typical, ]
 outliers <- row.names(dfOutliers)
 outliers <- which(dfAllSeqs$bin_uri == outliers)
-# Remove them from dfAllSeqs, if desired.
+# Remove the outliers from dfAllSeqs as we will be retrimming these sequences 
+# again once troublesome cases are removed.
 dfAllSeqs <- dfAllSeqs[-outliers, ]
-
-# LEFT OFF HERE!
 
 ### NEAREST NEIGHBOUR CHECK ###
 # Remove centroid sequences whose nearest neighbours are in a different order or 
@@ -1083,7 +1082,7 @@ dfAllSeqs <- dfAllSeqs[-outliers, ]
 # Applying this function to geneticDistanceCentroid.
 NearestNeighbour <- t(sapply(seq(nrow(geneticDistanceCentroid)), function(i) {
   # Identify the sequence with the minimum distance in the row (the nearest
-  # neighbour of i)
+  # neighbour of i).
   j <- which.min(geneticDistanceCentroid[i, ])
   # Assign the name of the BIN and the name of its nearest neighbour to a 
   # separate column.
@@ -1092,100 +1091,126 @@ NearestNeighbour <- t(sapply(seq(nrow(geneticDistanceCentroid)), function(i) {
     geneticDistanceCentroid[i, j])
 }))
 # Convert to dataframe.
-NearestNeighbour <- as.data.frame(NearestNeighbour, stringsAsFactors = FALSE)
+dfNearestNeighbour <- as.data.frame(NearestNeighbour, stringsAsFactors = FALSE)
 # Split the columns using the transform() function.
-NearestNeighbour <- transform(NearestNeighbour,  V1 = colsplit(V1, split = "/", 
-                                           names = c('bin_uri', 
-                                                     'nearest_neighbour')))
-# Re-add the genetic distances to the dataframe.
-NearestNeighbour$V2 <- as.numeric(NearestNeighbour$V2)
-colnames(NearestNeighbour)[2] <- "pairwise_distance"
-# Get the family and order names of BINs and nearest neighbours.
-dfNN <- NearestNeighbour$V1
-dfNN$pairwise_distance <- NearestNeighbour$pairwise_distance
-bins <- as.character(dfNN$bin_uri)
-nn <- as.character(dfNN$nearest_neighbour)
-# Now extract the orders and families from dfAllSeqs.
-bin_ord <- dfAllSeqs[match(dfNN$bin_uri, dfCheckAllSeqs$bin_uri), ] 
-bin_orders <- bin_ord$order_name
-bin_families <- bin_ord$family_name
-nn_ord <- dfAllSeqs[match(dfNN$nearest_neighbour, dfCheckAllSeqs$bin_uri), ] 
-nn_orders <- nn_ord$order_name
-nn_families <- nn_ord$family_name
-# Add these columns to dfNN.
-dfNN$bin_order <- bin_orders
-dfNN$bin_family <- bin_families
-dfNN$nn_order <- nn_orders
-dfNN$nn_family <- nn_families
-dfNN <- setDT(dfNN)
+dfNearestNeighbour <- transform(dfNearestNeighbour, 
+                                V1 = colsplit(V1, split = "/", 
+                                              names = c('bin_uri', 
+                                                        'nearest_neighbour')))
+# Make sure the genetic distances are numeric.
+dfNearestNeighbour$V2 <- as.double(dfNearestNeighbour$V2)
+# Now we need to get the family and order names of the BINs and their nearest 
+# neighbours.
+# Convert into another dataframe first (we need to do this to fully separate
+# the bin_uri and nearest_neighbour columns).
+df2NearestNeighbour <- dfNearestNeighbour$V1
+df2NearestNeighbour$pairwise_distance <- dfNearestNeighbour$V2
+# Now extract the bin_uri and nearest_neighbour columns as vectors.
+bins <- as.character(df2NearestNeighbour$bin_uri)
+nn <- as.character(df2NearestNeighbour$nearest_neighbour)
+# Make a dataframe called dfBinOrd and match the order of the bin_uris in this 
+# dataframe to the order of the bin_uris in dfCheckAllSeqs.
+dfBinOrd <- dfCheckAllSeqs[match(df2NearestNeighbour$bin_uri, 
+                                dfCheckAllSeqs$bin_uri), ]
+# Extract the order and family names.
+bin_orders <- dfBinOrd$order_name
+bin_families <- dfBinOrd$family_name
+# Do the same for the nearest neighbour bins.
+dfNeighbourOrd <- dfCheckAllSeqs[match(df2NearestNeighbour$nearest_neighbour, 
+                                       dfCheckAllSeqs$bin_uri), ] 
+nn_orders <- dfNeighbourOrd$order_name
+nn_families <- dfNeighbourOrd$family_name
+# Add these columns to df2NearestNeighbour.
+df2NearestNeighbour$bin_order <- bin_orders
+df2NearestNeighbour$bin_family <- bin_families
+df2NearestNeighbour$nn_order <- nn_orders
+df2NearestNeighbour$nn_family <- nn_families
+df2NearestNeighbour <- setDT(df2NearestNeighbour)
 # Non-matching orders.
-nonmatchOrd <- which(dfNN$bin_order != dfNN$nn_order)
-# Look closely.
-dfNonmatchOrd <- dfNN[nonmatchOrd, ]
+nonmatchOrd <- which(df2NearestNeighbour$bin_order != df2NearestNeighbour$nn_order)
+# Look closely at the cases where the orders do not match.
+dfNonmatchOrd <- df2NearestNeighbour[nonmatchOrd, ]
+# Which are very close neighbours (i.e. there may be something weird going on)?
 dfNonmatchOrd <- dfNonmatchOrd[which(pairwise_distance < 0.05)]
-# Remove these BINs.
-nonMatchOrdBins <- dfNonmatchOrd$bin_uri
-dfAllSeqs <- dfAllSeqs[!dfAllSeqs$bin_uri %in% nonMatchOrdBins, ]
-# Non-matching fams.
-nonmatchFam <- which(dfNN$bin_family != dfNN$nn_family)
-# LOook closely.
-dfNonmatchFam <- dfNN[nonmatchFam, ]
+# There doesn't seem to be any weird cases with the current taxa. But if there 
+# were, lines 1137-1138 may be used to remove weird BINs (you should double 
+# check these cases on the BOLD website, too) from dfAllSeqs.
+#nonMatchOrdBins <- dfNonmatchOrd$bin_uri
+#dfAllSeqs <- dfAllSeqs[!dfAllSeqs$bin_uri %in% nonMatchOrdBins, ]
+# Now, let's take a look at the BINs where the nearest neighbour is in a 
+# different family.
+nonmatchFam <- which(df2NearestNeighbour$bin_family != df2NearestNeighbour$nn_family)
+# Which are very close neighbours?
+dfNonmatchFam <- df2NearestNeighbour[nonmatchFam, ]
 dfNonmatchFam <- dfNonmatchFam[which(pairwise_distance < 0.05)]
-# Remove these BINs.
-nonMatchFamBins <- dfNonmatchFam$bin_uri
-# If you decide to remove all from your data:
-dfAllSeqs <- dfAllSeqs[!dfAllSeqs$bin_uri %in% nonMatchFamBins, ]
+# Again, there doesn't seem to be any weird cases with the current taxa. But if 
+# there were, lines 1149-1150 may be used to remove weird BINs (you should 
+# doublecheck these cases on the BOLD website, too) from dfAllSeqs.
+#nonMatchFamBins <- dfNonmatchFam$bin_uri
+#dfAllSeqs <- dfAllSeqs[!dfAllSeqs$bin_uri %in% nonMatchFamBins, ]
 
-# Now check for any neighbours under 0.05 in different ord or fam.
-# Subset out all close neighbour pairings.
+# Now, we will be performing a more comprehensive check, just in case. Do the
+# bins have ANY close neighbours within a genetic distance of 0.05 that are in a
+# different order or family? Again, this may be indicative of something weird
+# going on in either the sequence data or taxonomic assignment.
+# First, subset out all close neighbour pairings that share a genetic distance
+# under 0.05 to any other sequence.
 dfGeneticDistance <- as.data.frame(geneticDistanceCentroid)
 closeNeighbours <- which(dfGeneticDistance < 0.05, arr.ind = TRUE)
+# Extract the row names (the names of the BINs).
 bins <- row.names(dfGeneticDistance[closeNeighbours[, 1],] )
+# Extract the column names (the names of the neighbour BINs).
 nn <- colnames(dfGeneticDistance[closeNeighbours[, 2]])
-closeNeighbours <- as.data.frame(bins)
-closeNeighbours$bins <- as.character(closeNeighbours$bins)
-closeNeighbours$neighbour <- nn
-# Get family and order names of BINs and nearest neighbours.
-# Make dfs following these orders we can extract order and family names.
-bin_ord <- dfAllSeqs[match(closeNeighbours$bins, dfAllSeqs$bin_uri), ] 
-bin_orders <- bin_ord$order_name
-bin_families <- bin_ord$family_name
-nn_ord <- dfAllSeqs[match(closeNeighbours$neighbour, dfAllSeqs$bin_uri), ] 
-nn_orders <- nn_ord$order_name
-nn_families <- nn_ord$family_name
-# Add these columns to the dfNN.
-closeNeighbours$bin_order <- bin_orders
-closeNeighbours$bin_family <- bin_families
-closeNeighbours$nn_order <- nn_orders
-closeNeighbours$nn_family <- nn_families
-closeNeighbours <- setDT(closeNeighbours)
-# Fill in missing data in bin columnn.
+# Convert to a dataframe.
+dfCloseNeighbours <- as.data.frame(bins)
+dfCloseNeighbours$bins <- as.character(dfCloseNeighbours$bins)
+dfCloseNeighbours$neighbour <- nn
+# Following the same protocol as before, extract the order and family names of 
+# the BINs and their close neighbours.
+dfBinOrd <- dfCheckAllSeqs[match(dfCloseNeighbours$bins, 
+                                 dfCheckAllSeqs$bin_uri), ] 
+bin_orders <- dfBinOrd$order_name
+bin_families <- dfBinOrd$family_name
+dfNeighbourOrd <- dfCheckAllSeqs[match(dfCloseNeighbours$neighbour, 
+                                       dfCheckAllSeqs$bin_uri), ] 
+nn_orders <- dfNeighbourOrd$order_name
+nn_families <- dfNeighbourOrd$family_name
+# Add these columns to dfCloseNeighbours.
+dfCloseNeighbours$bin_order <- bin_orders
+dfCloseNeighbours$bin_family <- bin_families
+dfCloseNeighbours$nn_order <- nn_orders
+dfCloseNeighbours$nn_family <- nn_families
+# Convert to datatable.
+dfCloseNeighbours <- setDT(dfCloseNeighbours)
+# Some BINs have multiple close neighbours and were assigned extra numbers in 
+# the dataframe (e.g. ACFGGF, ACFGGF.1). To resolve this, use the function 
+# na.locf() from the "zoo" package to fill in missing data based on the data in 
+# the row above.
 # BINs columns.
-closeNeighbours <- closeNeighbours[order(closeNeighbours$bins), ]
+# Make sure they are in the correct order in the "bins" column.
+dfCloseNeighbours <- dfCloseNeighbours[order(dfCloseNeighbours$bins), ]
 #install.packages("zoo")
 library(zoo)
-closeNeighbours$bin_order <- na.locf(closeNeighbours$bin_order)
-closeNeighbours$bin_family <- na.locf(closeNeighbours$bin_family)
-# NN columns.
-closeNeighbours <- closeNeighbours[order(closeNeighbours$neighbour), ]
-closeNeighbours$nn_order <- na.locf(closeNeighbours$nn_order)
-closeNeighbours$nn_family <- na.locf(closeNeighbours$nn_family)
-# Non matching orders.
-nonmatchOrd <- which(closeNeighbours$bin_order != closeNeighbours$nn_order)
-# Look closely.
-dfNonmatchOrd <- dfNN[nonmatchOrd, ]
-dfNonmatchOrd <- dfNonmatchOrd[which(pairwise_distance < 0.05)]
-# Non matching fams.
-nonmatchFam <- which(closeNeighbours$bin_family != closeNeighbours$nn_family)
-# LOook closely.
-dfNonmatchFam <- closeNeighbours[nonmatchFam, ]  # Some ones I already removed!
-# If you decide to remove all from your data:
-dfAllSeqs <- dfAllSeqs[!dfAllSeqs$bin_uri %in% dfNonmatchFam$bins, ]
+# Fill in the bin_order column.
+dfCloseNeighbours$bin_order <- na.locf(dfCloseNeighbours$bin_order)
+# Fill in the bin_family column.
+dfCloseNeighbours$bin_family <- na.locf(dfCloseNeighbours$bin_family)
+# Do the same for the neighbour BINs.
+dfCloseNeighbours <- dfCloseNeighbours[order(dfCloseNeighbours$neighbour), ]
+dfCloseNeighbours$nn_order <- na.locf(dfCloseNeighbours$nn_order)
+dfCloseNeighbours$nn_family <- na.locf(dfCloseNeighbours$nn_family)
+# Now, which orders do not match between bin_order and nn_order?
+nonmatchOrd <- which(dfCloseNeighbours$bin_order != dfCloseNeighbours$nn_order)
+# Which families do not match between bin_family and nn_family?
+nonmatchFam <- which(dfCloseNeighbours$bin_family != dfCloseNeighbours$nn_family)
+# Looking good, no mismatches!
 
-# Align and trim dfAllSeqs again without the extreme BINs and conflicted BINs.
+# LEFT OFF HERE!
+# Now we have completed all of the checks. Re-align and trim dfAllSeqs again 
+# without the extreme BINs and conflicted BINs.
 dfCheck2AllSeqs <- refSeqTrim(dfAllSeqs)
 
-# If dfCheck2AllSeqs alignment acceptable, proceed!
+# If dfCheck2AllSeqs alignment is acceptable, proceed!
 
 # Which outgroups made the cut? Remove them from MSA so I can build tree
 # just using the ingroup.

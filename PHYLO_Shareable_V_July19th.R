@@ -22,10 +22,8 @@ library(data.table)
 # For multiple sequence alignments:
 #source("https://bioconductor.org/biocLite.R")
 #biocLite("Biostrings")
-#biocLite("DECIPHER")
-#biocLite("muscle")
 library(Biostrings)
-library(DECIPHER)
+#biocLite("muscle")
 library(muscle)
 #install.packages("seqinr")
 library(seqinr)
@@ -54,10 +52,11 @@ library(rfishbase)
 #install.packages("plyr")
 library(plyr)
 library(lattice)
+#install.packages("gtools")
 library(gtools)
 #install.packages("caret")
 library(caret)
-require(reshape)
+library(reshape)
 
 # For trait data purposes:
 #install.packages("adephylo")
@@ -69,6 +68,8 @@ library(phylometrics)
 
 # Missing data:
 library(dplyr)
+#install.packages("zoo")
+library(zoo)
 
 
 ##### SECTION 1: DATA PROCESSING #####
@@ -234,11 +235,8 @@ dfResolve <- subset(dfFiltered, bin_uri %in% speciesBins)
 # down the line.
 # Now, I want to resolve BINs with more than 1 order and/or family.
 # First, I need to replace all blanks with NA values in the taxonomy columns.
-# This is to ensure that blanks are not counted as their own taxa.
-dfResolve[, order_name := revalue(order_name, c(" " = NA))]
-dfResolve[, family_name := revalue(family_name, c(" " = NA))]
-dfResolve[, genus_name := revalue(genus_name, c(" " = NA))]
-dfResolve[, species_name := revalue(species_name, c(" " = NA))]
+# This is to ensure that empty cells are not counted as their own taxa.
+dfResolve[dfResolve == ""] <- NA
 
 # Now find the number of orders/families/genera/species in each BIN.
 dfResolve[, number_of_orders := length(unique(order_name[!is.na(order_name)])), 
@@ -278,6 +276,7 @@ dfResolve[, number_of_orders := length(unique(order_name[!is.na(order_name)])),
 # Making sure there aren't any order level conflicts.
 orderConflicts <- dfResolve[, which(number_of_orders > 1), by = bin_uri]
 orderConflicts <- unique(orderConflicts$bin_uri)
+length(orderConflicts)
 rm(orderConflicts)
 
 # Family level resolving.
@@ -303,6 +302,7 @@ dfResolve[, number_of_families := length(unique(family_name[!is.na(family_name)]
           keyby = bin_uri]
 familyConflicts <- dfResolve[, which(number_of_families > 1), by = bin_uri]
 familyConflicts <- unique(familyConflicts$bin_uri)
+length(familyConflicts)
 rm(familyConflicts)
 rm(speciesBins)
 
@@ -1203,8 +1203,6 @@ dfCloseNeighbours <- setDT(dfCloseNeighbours)
 # the row above.
 # Make sure they are in the correct order in the "bins" column.
 dfCloseNeighbours <- dfCloseNeighbours[order(dfCloseNeighbours$bins), ]
-#install.packages("zoo")
-library(zoo)
 # Fill in the bin_order column.
 dfCloseNeighbours$bin_order <- na.locf(dfCloseNeighbours$bin_order)
 # Fill in the bin_family column.
@@ -1405,8 +1403,6 @@ dfAgeMaturity <- as.data.frame(dfAgeMaturity)
 c_data <- comparative.data(tree, dfAgeMaturity, "species_name")
 caperAge <- pgls(branch_length ~ number_of_nodes + age_at_maturity.y, c_data, 
                  lambda = "ML")
-
-# LEFT OFF HERE!
 
 # Discrete traits.
 ## 7. Neritic.

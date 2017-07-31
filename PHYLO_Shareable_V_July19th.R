@@ -588,7 +588,8 @@ dfSpecies <- fread("species_datatable.csv")
 # Datatable reorganization and renaming. Renaming column names to keep variable
 # syntax consistent throughout the pipeline.
 dfSpeciesTraits <- dfSpecies[, .(species_name = sciname, 
-                                 BodyShapeI, LongevityWild, Length, LTypeMaxM)]
+                                 BodyShapeI, LongevityWild, Length, LTypeMaxM,
+                                 DepthRangeDeep)]
 # TRAIT: Body Shape I.
 # Filtering for presence of body shape data. This is for the univariate analyses 
 # section.
@@ -628,11 +629,22 @@ nrow(dfMaxLength)
 hist(dfMaxLength$Length)
 range(dfMaxLength$Length)
 
+# TRAIT: Maximum depth.
+# The column must first be converted to double (numeric) type.
+dfMaxDepth <- dfSpeciesTraits[, DepthRangeDeep := as.double(DepthRangeDeep)]
+# TEST 1: Does the trait have an adequate sample size?
+dfMaxDepth <- setDT(GetTraitSpecificData(dfMaxDepth, 6))
+nrow(dfMaxDepth)
+# TEST 2: Does the trait have enough data variation?
+hist(dfMaxDepth$DepthRangeDeep)
+range(dfMaxDepth$DepthRangeDeep)
+
 # Finally, prepare the dfSpeciesGenMV datatable by merging all univariate 
 # datatables. This datatable will be used for the eventual multivariate analysis.
 # Merging multiple datatables at once.
-dfSpeciesGenMV <- Reduce(function(...) merge(...), 
-                         list(dfBodyShapeI, dfLongWild, dfMaxLength))
+dfSpeciesGenMV <- Reduce(function(...) merge(..., all = T), 
+                         list(dfBodyShapeI, dfLongWild, dfMaxLength,
+                              dfMaxDepth))
 
 ### LIFE HISTORY RELATED ###
 # Maturity.
@@ -744,9 +756,9 @@ dfFeedingType$FeedingType <- droplevels(dfFeedingType$FeedingType)
 # Finally, prepare the dfEcologyMV datatable by merging all univariate 
 # datatables.
 # Merging multiple datatables at once.
-dfEcologyMV <- Reduce(function(...) merge(...), list(dfNeritic, dfOceanic,
-                                                     dfStreams, dfLakes,
-                                                     dfFeedingType, dfBenthic))
+dfEcologyMV <- Reduce(function(...) merge(..., all = T), 
+                      list(dfNeritic, dfOceanic, dfStreams, 
+                           dfLakes, dfFeedingType, dfBenthic))
 
 # Construction of dfTraits datatable.
 # This table contains all the potential traits for multivariate analysis.
@@ -759,16 +771,17 @@ dfFilteredSingle <- dfFiltered[!duplicated(dfFiltered$bin_uri), ]
 dfFilteredSingle <- dfFilteredSingle[, .(bin_uri, species_name, 
                                          initial_bin_size, filtered_bin_size)]
 # Now merge to all of the trait MV datatables.
-dfTraits <- merge(dfFilteredSingle, dfLatitude, all = TRUE, by = "bin_uri")
+dfTraits <- merge(dfFilteredSingle, dfLatitude, all = T, by = "bin_uri")
 # Set the keys for datatable merging.
 setkey(dfTraits, species_name)
 setkey(dfSpeciesGenMV, species_name)
 setkey(dfEcologyMV, species_name)
 dfTraits <- Reduce(function(...) merge(..., all = T), list(dfTraits, 
                                                            dfSpeciesGenMV,
-                                                           dfEcologyMV))
+                                                           dfEcologyMV,
+                                                           dfAgeMaturity))
 # Dataframe reorganization.
-dfTraits <- dfTraits[, c(1:4, 7:16)]
+dfTraits <- dfTraits[, c(1:4, 7:18)]
 colnames(dfTraits)[4] <- "filtered_bin_size"
 
 # Merge back to dfFiltered to obtain all of the sequence information for 
@@ -780,6 +793,7 @@ colnames(dfPreCentroid)[8] <- "initial_bin_size"
 colnames(dfPreCentroid)[9] <- "filtered_bin_size"
 dfPreCentroid <- dfPreCentroid[, c(1:9)]
 
+################################################################################
 ### SECTION 3: CENTROID SEQUENCE DETERMINATION ###
 # Centroid Sequence: BIN sequence with minimum average pairwise distance to all 
 # other sequences in a given BIN.
@@ -1006,7 +1020,8 @@ refSeqTrim <- function(data) {
 
 dfCheckAllSeqs <- refSeqTrim(dfAllSeqs)
 
-### ALIGNMENT QUALITY CHECKING ###
+################################################################################
+### SECTION 4: ALIGNMENT QUALITY CHECKING ###
 # Here, extremely gappy/ungappy sequences are removed. These sequences are 
 # assumed to contribute to misalignment of the sequences or may even be 
 # pseudogenes. Manually checking of the alignment is recommended.
@@ -1186,7 +1201,6 @@ dfCloseNeighbours <- setDT(dfCloseNeighbours)
 # the dataframe (e.g. ACFGGF, ACFGGF.1). To resolve this, use the function 
 # na.locf() from the "zoo" package to fill in missing data based on the data in 
 # the row above.
-# BINs columns.
 # Make sure they are in the correct order in the "bins" column.
 dfCloseNeighbours <- dfCloseNeighbours[order(dfCloseNeighbours$bins), ]
 #install.packages("zoo")
@@ -1205,298 +1219,231 @@ nonmatchOrd <- which(dfCloseNeighbours$bin_order != dfCloseNeighbours$nn_order)
 nonmatchFam <- which(dfCloseNeighbours$bin_family != dfCloseNeighbours$nn_family)
 # Looking good, no mismatches!
 
-# LEFT OFF HERE!
-# Now we have completed all of the checks. Re-align and trim dfAllSeqs again 
-# without the extreme BINs and conflicted BINs.
-dfCheck2AllSeqs <- refSeqTrim(dfAllSeqs)
-
-# If dfCheck2AllSeqs alignment is acceptable, proceed!
-
-# Which outgroups made the cut? Remove them from MSA so I can build tree
-# just using the ingroup.
+### OUTGROUP CHECK ###
+# Which outgroups made the cut? Remove them from dfAllSeqs so I can build tree
+# just using the ingroup (so that inclusion of outgroups in the tree building
+# process doesn't affect the branch length estimates of the in-group).
 outgroupSpecies <- unique(dfOutgroup$species_name)
 dfGoodOutgroups <- dfAllSeqs[dfAllSeqs$species_name %in% outgroupSpecies, ]
-outgroupBins <- unique(dfGoodOutgroups$species_name)
-# Remove the outgroups from dfCheck2AllSeqs.
-dfCheck3AllSeqs <- dfCheck2AllSeqs[!dfCheck2AllSeqs$bin_uri %in% outgroupBins, ]
-# Run the alignment without the outgroups.
-# Check over sequences/alignment, make sure it is in correct reading frame.
-dfCheck4AllSeqs <- refSeqTrim(dfCheck3AllSeqs)
+# Remove the outgroups from dfAllSeqs.
+dfAllSeqsNO <- dfAllSeqs[!dfAllSeqs$species_name %in% outgroupSpecies, ]
+# Now, re-trim and align the sequences without the outgroups.
+dfAllSeqsNO <- refSeqTrim(dfAllSeqsNO)
+# Once finished, make sure to check over sequences/alignment, and make sure they
+# are in the correct reading frame. Make sure to save the resulting alignments
+# under a different name, or save in a new directory so they are not replaced.
 
-# Now run with the outgroups.
-goodOG <- which(dfAllSeqs$species_name == "Raja montagui" |
-                dfAllSeqs$species_name == "Raja polystigma" |
-                dfAllSeqs$species_name == "Neoceratodus forsteri" |
-                dfAllSeqs$species_name == "Castor fiber" |
-                dfAllSeqs$species_name == "Cratogeomys perotensis")
+# Now re-run the alignment including outgroups (pick outgroup species that are
+# well represented and that serve as appropriate outgroup to your taxa).
+goodOG <- which(dfAllSeqs$species_name == "Boreogadus saida" |
+                dfAllSeqs$species_name == "Merluccius merluccius")
 mergeOG <- dfAllSeqs[goodOG, ]
 # Add them back.
-dfCheck5AllSeqs <- rbind(dfCheck4AllSeqs, mergeOG)
+dfAllSeqsWithOG <- rbind(dfAllSeqsNO, mergeOG)
 # Run the alignment.
-dfFinalAllSeqs <- refSeqTrim(dfCheck5AllSeqs)
+dfAllSeqsWithOG <- refSeqTrim(dfAllSeqsWithOG)
 
 ################################################################################
-# CHECK THAT ALIGNMENT AND dfCheck2AllSeqs are the same.
-x <- read.fasta(file="withNOoutgroupsMAY23rd.fas")
-fish <- names(x)
-fish <- gsub("_", " ", fish)
-
-dfNamesNoOG <- dfCheckAllSeqs[dfCheckAllSeqs$species_name %in% fish, ]
-
-# TREE SECTION! #
-# BINARY CONSTRAINT TREE PRUNING #
-# First, let's download the tree we are using as a topological constraint.
-fishTree <- read.tree(file = "fishTree.tre")
-# Change the tip labels to just species names.
-fishTree$tip.label <- gsub("_", " ", fishTree$tip.label)
-fishTree$tip.label <- substr(fishTree$tip.label, 7, nchar(fishTree$tip.label))
-fishTree$node.label <- NULL
-
-# Prune the constraint tree so only those tips that are match with names in 
-# dfNoOutgroups remain.
-prunedFishTree <- drop.tip(phy = fishTree, 
-                           tip = fishTree$tip.label[!fishTree$tip.label%in%dfCheck4AllSeqs$species_name], 
-                           rooted = T)
-prunedFishTree$edge.length <- NULL  # Don't need branch lengths for binary constraint file (just relationships.)
-prunedFishTree$node.label <- NULL
-write.tree(prunedFishTree, file = "prunedFishTreeFINAL.txt")
-write.tree(prunedFishTree, file = "prunedFishTreeFINAL.tre")
-
-
-### SECTION 4: UNIVARIATE ANALYSES ###
+### SECTION 5: STATISTICAL ANALYSES ###
 # This is the section where the univariate analyses are performed as a form
 # of model selection.
 
-### WHOLE ALIGNMENT: CONSTRAINED ###
-# Read in the tree.
-rootedWholeTree <- read.tree(file = "RAxML_labelledTree.FinalTryEPA")
-rootedWholeTree$tip.label <- gsub("_", " ", rootedWholeTree$tip.label)
+# First, read in your phylogenetic tree.
+tree <- read.tree(file = "RAxML_labelledTree.EPAPercTree3")
+tree$tip.label <- gsub("_", " ", tree$tip.label)
 
 # Root the tree.
-outgroups <- c("QUERY   Raja montagui", "QUERY   Raja polystigma", 
-               "Echinorhinus cookei", "Echinorhinus brucus")
-rootedWholeTree <- root(rootedWholeTree, outgroup = outgroups, 
-                        resolve.root = TRUE)
+outgroups <- c("QUERY   Boreogadus saida")
+tree <- root(tree, outgroup = outgroups, resolve.root = TRUE)
+# Re-name the outgroup.
+tree$tip.label <- gsub("QUERY   Boreogadus saida", "Boreogadus saida", tree$tip.label)
 
-################################################################################
-# TRAIT: NUMBER OF NODES
-# Let's first determine the number of nodes for each species.
-#phy4ML <- as(unconstrainedTree, "phylo4")
-#plot(phy4ML, show.node = TRUE)
-#root <- rootNode(phy4ML)
-# A bit slow.
-#nodeList <- lapply(1:nTips(phy4ML), function(i) .tipToRoot(phy4ML, i, root))
-#numberOfNodes2 <- sapply(1:nTips(phy4ML), function(i) length(nodeList[[i]]))
-#names(numberOfNodes2) <- tipLabels(phy4ML)
-numberOfNodes <- distRoot(rootedWholeTree, tips = "all", method = "nNodes")
+### TRAIT: NUMBER OF NODES.
+# Let's first determine the number of nodes for each species. This will be used
+# as a control variable in the multiple regression analysis (to account for the
+# node density effect).
+number_of_nodes <- distRoot(tree, tips = "all", method = "nNodes")
 # Make a dataframe of this information
-dfNumberOfNodes <- data.frame(numberOfNodes)
+dfNumberOfNodes <- data.frame(number_of_nodes)
 dfNumberOfNodes$species_name <- row.names(dfNumberOfNodes)
+# Merge with dfAllSeqsNode.
+dfAllSeqsNode <- merge(dfAllSeqsWithOG, dfNumberOfNodes, by = "species_name")
 
-################################################################################
-# Merge with the node_number df.
-# Match the species names in data to tip labels.
-dfAllSeqsNode <- merge(dfAllSeqs, dfNumberOfNodes, by = "species_name", 
-                       all = TRUE)
-
-# Let's calculate the sum of branch lengths now (from root to tip).
-#is.rooted(unconstrainedTree)
-#branchLengths <- distRoot(unconstrainedTree, tips = "all", method = "patristic")
-branchLengths <- diag(vcv.phylo(rootedWholeTree)) 
+### TRAIT: BRANCH LENGTHS.
+# Let's calculate the sum of branch lengths now (from root to tip). These values
+# will serve as out measurement of molecular evolution rate.
+branch_lengths <- distRoot(tree, tips = "all", method = "patristic")
 # Make into a dataframe.
-dfBranchLengths <- data.frame(branchLengths)
-colnames(dfBranchLengths)[1] <- "branchLength"
-dfBranchLengths$species_name <- names(branchLengths)
-hist(dfBranchLengths$branchLength, main = "", xlab = "Branch Length")
-median(dfBranchLengths$branchLength)
-mean(dfBranchLengths$branchLength)
-range(dfBranchLengths$branchLength)
-# Merge dfBranchLengths and dfRecodedPreCent.
+dfBranchLengths <- data.frame(branch_lengths)
+colnames(dfBranchLengths)[1] <- "branch_length"
+dfBranchLengths$species_name <- names(branch_lengths)
+# Check the distribution of the branch lengths.
+hist(dfBranchLengths$branch_length, main = "", xlab = "Branch Length")
+# Some more stats.
+median(dfBranchLengths$branch_length)
+mean(dfBranchLengths$branch_length)
+range(dfBranchLengths$branch_length)
+# Merge dfBranchLengths and dfAllSeqsNode.
 dfRegression <- merge(dfBranchLengths, dfAllSeqsNode, by = "species_name")
-# Merge back to the trait dataframe.
-dfRegression <- merge(dfRegression, dfTraits, all.x = TRUE, by = "bin_uri")
+# Merge back to the traits dataframe.
+dfRegression <- merge(dfRegression, dfTraits, all.x = T, by = "bin_uri")
 # Some reordering.
-dfRegression <- dfRegression[, c(2:4, 11, 15:56)]
-colnames(dfRegression)[1] <- "species_name"
-colnames(dfRegression)[3] <- "bin_size"
+dfRegression <- dfRegression[, c(1, 6:8, 2:4, 11, 15:26)]
+# Renaming for consistency purposes.
+colnames(dfRegression)[5] <- "species_name"
+colnames(dfRegression)[6] <- "branch_length"
+colnames(dfRegression)[7] <- "bin_size"
+colnames(dfRegression)[8] <- "number_of_nodes"
+colnames(dfRegression)[10] <- "body_shape"
+colnames(dfRegression)[11] <- "longevity"
+colnames(dfRegression)[12] <- "max_length"
+colnames(dfRegression)[13] <- "max_depth"
+colnames(dfRegression)[14] <- "neritic"
+colnames(dfRegression)[15] <- "oceanic"
+colnames(dfRegression)[16] <- "streams"
+colnames(dfRegression)[17] <- "lakes"
+colnames(dfRegression)[18] <- "feeding_type"
+colnames(dfRegression)[19] <- "benthic"
 
 
-### SECTION 5: STATISTICS ###
-# Check the traits for inclusion in MV analysis.
+### Univariate analyses ###
+# Running a univariate PGLS regression analysis for each trait to determine
+# whether significance can be detected. If so, they will be included in the 
+# multiple regression model selection process.
+
 # First, make sure the trait data and phylo tree are in the same order.
 # Make sure the order of the data matches the tree.
-dfRegression <- dfRegression[match(rootedWholeTree$tip.label, 
+tree <- drop.tip(phy = tree, 
+                     tip = tree$tip.label[!tree$tip.label%in%dfRegression$species_name], 
+                     rooted = T)
+dfRegression <- dfRegression[match(tree$tip.label, 
                                    dfRegression$species_name), ]
 
-# TRAIT: Branch length.
-# Pagel's lambda. A test for phylogenetic signal.
-branch_length <- dfRegression$branchLength
-names(branch_length) <- rootedWholeTree$tip.label
-sigBL <- phylosig(rootedWholeTree, branch_length, method = "lambda", 
-                  test = TRUE)
+## 1. Branch length.
+# As branch length is our response variable, we will only be estimating Pagel's 
+# lambda, which is a measure of phylogenetic signal.
+branch_length <- dfRegression$branch_length
+names(branch_length) <- tree$tip.label
+sigBL <- phylosig(tree, branch_length, method = "lambda", test = TRUE)
 
-# TRAIT: Number of nodes.
-# Pagel's lambda. A test for phylogenetic signal.
-number_of_nodes <- dfRegression$numberOfNodes
-names(number_of_nodes) <- rootedWholeTree$tip.label
-sigNodes <- phylosig(rootedWholeTree, number_of_nodes, method = "lambda", 
-                     test = TRUE)
-dfRegression <- dfRegression[match(rootedWholeTree$tip.label, 
-                                   dfRegression$species_name), ]
-dfRegression <- as.data.frame(dfRegression)
-dfNodes <- dfRegression[, c(1:2, 4)]
-dfNodes <- dfNodes[sample(nrow(dfNodes), 4000), ] # 5929
-# Test using caper.
-c_data <- comparative.data(rootedWholeTree, dfNodes, "species_name")
-caperNodes <- pgls(branchLength ~ numberOfNodes, c_data, lambda = "ML")
+## 2. Number of nodes.
+# Estimation of Pagel's lambda.
+number_of_nodes <- dfRegression$number_of_nodes
+names(number_of_nodes) <- tree$tip.label
+sigNodes <- phylosig(tree, number_of_nodes, method = "lambda", test = TRUE)
+# Make a univariate dataframe for number_of_nodes.
+dfNodes <- dfRegression[, c(5:6, 8)]
+# Perform a PGLS analysis using caper.
+# First, we must make a comparative.data object to ensure the tree tips and data
+# match.
+c_data <- comparative.data(tree, dfNodes, "species_name")
+caperNodes <- pgls(branch_length ~ number_of_nodes, c_data, lambda = "ML")
 
-# TRAIT: Median latitude.
+## 3. Median latitude.
 # Pagel's lambda. A test for phylogenetic signal.
 median_lat <- dfRegression$median_lat
-names(median_lat) <- rootedWholeTree$tip.label
-sigLat <- phylosig(rootedWholeTree, median_lat, method = "lambda", 
-                   test = TRUE)
-# Pruning tree for latitude.
-# Merge so can get branch length info for UV.
+names(median_lat) <- tree$tip.label
+sigLat <- phylosig(tree, median_lat, method = "lambda", test = TRUE)
+# Merge univariate dataframe to dfRegression to get branch length data.
 dfLatitude <- merge(dfLatitude, dfRegression, by.x = "species_label", 
                     by.y = "species_name")
-# Take BINs with highest number of sequences with species info in order to avoid
+dfLatitude <- dfLatitude[, c(1, 5, 10:11)]
+# As latitude was determined by BIN and not by species, take the BIN with
+# the highest number of sequences with species info in order to avoid
 # using BINs that were assigned the same species label.
-dfLatitude <- merge(aggregate(bin_size ~ species_label, data = dfLatitude, max), 
+dfLatitude <- merge(aggregate(filtered_bin_size ~ species_label, data = dfLatitude, max), 
                     dfLatitude, all.x = T, sort = TRUE)
 # Dealing with ties.
 dup_majority_species <- which(duplicated(dfLatitude$species_label))
 dfLatitude <- dfLatitude[-dup_majority_species,]
-rm(dup_majority_species)
-# Prune constrained tree so only those tips for lat are present.
-latTree <- drop.tip(phy = rootedWholeTree, 
-                    tip = rootedWholeTree$tip.label[!rootedWholeTree$tip.label%in%dfLatitude$species_name], 
-                    rooted = T)
-# Prune constrained tree so only those tips for lat are present.
-dfLatitude <- dfLatitude[match(latTree$tip.label, dfLatitude$species_name), ]
-dfLatitude <- as.data.frame(dfLatitude)
-row.names(dfLatitude) <- dfLatitude$species_name
-dfLatitude <- dfLatitude[, c(1:3, 5)]
 # Test using caper.
-c_data <- comparative.data(rootedWholeTree, dfLatitude, "species_name")
-caperLatitude <- pgls(branchLength ~ median_lat.x + numberOfNodes, c_data, 
+c_data <- comparative.data(tree, dfLatitude, "species_label")
+caperLatitude <- pgls(branch_length ~ median_lat.x + number_of_nodes, c_data, 
                       lambda = "ML")
 
-# TRAIT: Maximum length.
+## 4. Maximum length.
 # Pagel's lambda. A test for phylogenetic signal.
-maximum_length <- dfRegression$Length
-names(maximum_length) <- rootedWholeTree$tip.label
-sigLength <- phylosig(rootedWholeTree, maximum_length, method = "lambda", 
-                      test = TRUE)
-# Pruning tree.
-# Merge so can get branch length info for UV.
+maximum_length <- dfRegression$max_length
+names(maximum_length) <- tree$tip.label
+sigLength <- phylosig(tree, maximum_length, method = "lambda", test = TRUE)
+# Merge univariate dataframe to dfRegression to get branch length data.
 dfMaxLength <- merge(dfMaxLength, dfRegression, by = "species_name")
-# Prune constrained tree so only those tips for lat are present.
-lengthTree <- drop.tip(phy = rootedWholeTree, 
-                       tip = rootedWholeTree$tip.label[!rootedWholeTree$tip.label%in%dfMaxLength$species_name], 
-                       rooted = T)
-# Prune constrained tree so only those tips for lat are present.
-dfMaxLength <- dfMaxLength[match(lengthTree$tip.label, 
-                                 dfMaxLength$species_name), ]
+dfMaxLength <- dfMaxLength[, c(1, 7, 9, 13)]
+# Make sure it is of the dataframe format.
 dfMaxLength <- as.data.frame(dfMaxLength)
-row.names(dfMaxLength) <- dfMaxLength$species_name
-dfMaxLength <- dfMaxLength[, c(1:3, 5)]
 # Test using caper.
-c_data <- comparative.data(rootedWholeTree, dfMaxLength, "species_name")
-caperLength <- pgls(branchLength ~ Length.x + numberOfNodes, c_data, 
+c_data <- comparative.data(tree, dfMaxLength, "species_name")
+caperLength <- pgls(branch_length ~ number_of_nodes + max_length, c_data, 
                     lambda = "ML")
 
-# TRAIT: Longevity.
+## 5. Longevity.
 # Pagel's lambda. A test for phylogenetic signal.
-longevity <- dfRegression$LongevityWild
-names(longevity) <- rootedWholeTree$tip.label
-sigLong <- phylosig(rootedWholeTree, longevity, method = "lambda", test = TRUE)
-# Pruning tree for latitude.
-# Merge so can get branch length info for UV.
+longevity <- dfRegression$longevity
+names(longevity) <- tree$tip.label
+sigLong <- phylosig(tree, longevity, method = "lambda", test = TRUE)
+# Merge univariate dataframe to dfRegression to get branch length data.
 dfLongWild <- merge(dfLongWild, dfRegression, by = "species_name")
-# Prune constrained tree so only those tips for lat are present.
-longevityTree <- drop.tip(phy = rootedWholeTree, 
-                       tip = rootedWholeTree$tip.label[!rootedWholeTree$tip.label%in%dfLongWild$species_name], 
-                       rooted = T)
-tiph <- diag(vcv.phylo(longevityTree))
-dfLongWild <- dfLongWild[match(longevityTree$tip.label, dfLongWild$species_name), ]
+dfLongWild <- dfLongWild[, c(1, 7, 9, 12)]
+# Make sure it is of the dataframe format.
 dfLongWild <- as.data.frame(dfLongWild)
-row.names(dfLongWild) <- dfLongWild$species_name
-dfLongWild <- dfLongWild[, c(1:3, 5)]
-dfLongWild <- na.omit(dfLongWild)
-fitLong <- gls(branchLength ~ LongevityWild.x + numberOfNodes, 
-               correlation=corPagel(value = 0, phy = longevityTree),
-           weights=varFixed(~tiph), method = "ML", data = dfLongWild)
 # Test using caper.
-c_data <- comparative.data(rootedWholeTree, dfLongWild, "species_name")
-caperLong <- pgls(branchLength ~ LongevityWild.x + numberOfNodes, c_data, 
+c_data <- comparative.data(tree, dfLongWild, "species_name")
+caperLong <- pgls(branch_length ~ number_of_nodes + longevity, c_data, 
                   lambda = "ML")
 
-# TRAIT: Age at maturity
+## 6. Age at maturity.
 # Pagel's lambda. A test for phylogenetic signal.
 age_at_mat <- dfRegression$age_at_maturity
-names(age_at_mat) <- rootedWholeTree$tip.label
-sigAge <- phylosig(rootedWholeTree, age_at_mat, method = "lambda", test = TRUE)
-# Pruning tree.
-# Merge so can get branch length info for UV.
+names(age_at_mat) <- tree$tip.label
+sigAge <- phylosig(tree, age_at_mat, method = "lambda", test = TRUE)
+# Merge univariate dataframe to dfRegression to get branch length data.
 dfAgeMaturity <- merge(dfAgeMaturity, dfRegression, by = "species_name")
-# Prune constrained tree so only those tips for lat are present.
-ageTree <- drop.tip(phy = rootedWholeTree, 
-                        tip = rootedWholeTree$tip.label[!rootedWholeTree$tip.label%in%dfAgeMaturity$species_name], 
-                    rooted = T)
-tiph <- diag(vcv.phylo(ageTree))
-dfAgeMaturity <- dfAgeMaturity[match(ageTree$tip.label, dfAgeMaturity$species_name), ]
+dfAgeMaturity <- dfAgeMaturity[, c(1, 7, 9, 21)]
+# Make sure it is of the dataframe format.
 dfAgeMaturity <- as.data.frame(dfAgeMaturity)
-row.names(dfAgeMaturity) <- dfAgeMaturity$species_name
-dfAgeMaturity <- dfAgeMaturity[, c(1:3, 5)]
-fitAge <- gls(branchLength ~ age_at_maturity.x + numberOfNodes, 
-              correlation=corPagel(value = 0, phy = ageTree), 
-              weights=varFixed(~tiph), method = "ML", data = dfAgeMaturity)
 # Test using caper.
-c_data <- comparative.data(rootedWholeTree, dfAgeMaturity, "species_name")
-caperAge <- pgls(branchLength ~ age_at_maturity.x + numberOfNodes, c_data, 
+c_data <- comparative.data(tree, dfAgeMaturity, "species_name")
+caperAge <- pgls(branch_length ~ number_of_nodes + age_at_maturity.y, c_data, 
                  lambda = "ML")
 
+# LEFT OFF HERE!
+
 # Discrete traits.
-# TRAIT: NERITIC
-# Make sure the order of the data matches the constrained tree.
-dfRegression <- dfRegression[match(rootedWholeTree$tip.label, 
-                                   dfRegression$species_name), ]
+## 7. Neritic.
 # Merge so can get branch length info for UV.
 dfNeritic <- merge(dfNeritic, dfRegression, by = "species_name")
 # Prune constrained tree so only those tips for lat are present.
-neriticTree <- drop.tip(phy = rootedWholeTree, 
-                           tip = rootedWholeTree$tip.label[!rootedWholeTree$tip.label%in%dfNeritic$species_name], 
+neriticTree <- drop.tip(phy = tree, 
+                           tip = tree$tip.label[!tree$tip.label%in%dfNeritic$species_name], 
                         rooted = T)
 dfNeritic <- dfNeritic[match(neriticTree$tip.label, dfNeritic$species_name), ]
 dfNeritic <- as.data.frame(dfNeritic)
 row.names(dfNeritic) <- dfNeritic$species_name
-dfNeritic <- dfNeritic[, c(1:3, 5)]
+dfNeritic <- dfNeritic[, c(1, 15, 7, 9)]
 # Relevel body shape as I want fusiform / normal to be the reference.
-dfNeritic$Neritic.x <- relevel(dfNeritic$Neritic.x, ref = "0")
-dfRegression$Neritic <- relevel(dfRegression$Neritic, ref = "0")
-# Try using caper.
-c_data <- comparative.data(rootedWholeTree, dfNeritic, "species_name")
-caperNeritic <- pgls(branchLength ~ Neritic.x + numberOfNodes, c_data, 
-                     lambda = "ML")
+dfNeritic$neritic <- relevel(dfNeritic$neritic, ref = "0")
+dfRegression$neritic <- relevel(dfRegression$neritic, ref = "0")
 # D metric for phylogenetic signal.
 sigNer <- phylo.d(dfNeritic, neriticTree, names.col = species_name, 
-                  binvar = Neritic.x)
-#fit$opt$lambda
+                  binvar = neritic)
+# Try using caper.
+c_data <- comparative.data(tree, dfNeritic, "species_name")
+caperNeritic <- pgls(branch_length ~ neritic + number_of_nodes, c_data, 
+                     lambda = "ML")
 
-# TRAIT: OCEANIC
+## 8. Oceanic.
 #oceanic <- dfRegression$Oceanic
-#names(oceanic) <- rootedWholeTree$tip.label
-#fit <- fitDiscrete(rootedWholeTree, oceanic, transform = "lambda")
+#names(oceanic) <- tree$tip.label
+#fit <- fitDiscrete(tree, oceanic, transform = "lambda")
 #fit$opt$lambda
 # Make sure the order of the data matches the constrained tree.
-dfRegression <- dfRegression[match(rootedWholeTree$tip.label, 
+dfRegression <- dfRegression[match(tree$tip.label, 
                                    dfRegression$species_name), ]
 # Merge so can get branch length info for UV.
 dfOceanic <- merge(dfOceanic, dfRegression, by = "species_name")
 # Prune constrained tree so only those tips for lat are present.
-oceanicTree <- drop.tip(phy = rootedWholeTree, 
-                        tip = rootedWholeTree$tip.label[!rootedWholeTree$tip.label%in%dfOceanic$species_name], 
+oceanicTree <- drop.tip(phy = tree, 
+                        tip = tree$tip.label[!tree$tip.label%in%dfOceanic$species_name], 
                         rooted = T)
 dfOceanic <- dfOceanic[match(oceanicTree$tip.label, dfOceanic$species_name), ]
 dfOceanic <- as.data.frame(dfOceanic)
@@ -1506,26 +1453,26 @@ dfOceanic <- dfOceanic[, c(1:3, 5)]
 dfOceanic$Oceanic.x <- relevel(dfOceanic$Oceanic.x, ref = "0")
 dfRegression$Oceanic <- relevel(dfRegression$Oceanic, ref = "0")
 # Try using caper.
-c_data <- comparative.data(rootedWholeTree, dfOceanic, "species_name")
-caperOceanic <- pgls(branchLength ~ Oceanic.x + numberOfNodes, c_data, 
+c_data <- comparative.data(tree, dfOceanic, "species_name")
+caperOceanic <- pgls(branch_length ~ Oceanic.x + number_of_nodes, c_data, 
                      lambda = "ML")
 # D metric for phylogenetic signal.
 sigOceanic <- phylo.d(dfOceanic, oceanicTree, names.col = species_name, 
                       binvar = Oceanic.x)
 
-# TRAIT: BENTHIC
+## 9. Benthic.
 #benthic <- dfRegression$Benthic
-#names(benthic) <- rootedWholeTree$tip.label
-#fit <- fitDiscrete(rootedWholeTree, benthic, transform = "lambda")
+#names(benthic) <- tree$tip.label
+#fit <- fitDiscrete(tree, benthic, transform = "lambda")
 #fit$opt$lambda
 # Make sure the order of the data matches the constrained tree.
-dfRegression <- dfRegression[match(rootedWholeTree$tip.label, 
+dfRegression <- dfRegression[match(tree$tip.label, 
                                    dfRegression$species_name), ]
 # Merge so can get branch length info for UV.
 dfBenthic <- merge(dfBenthic, dfRegression, by = "species_name")
 # Prune constrained tree so only those tips for lat are present.
-benthicTree <- drop.tip(phy = rootedWholeTree, 
-                        tip = rootedWholeTree$tip.label[!rootedWholeTree$tip.label%in%dfBenthic$species_name], 
+benthicTree <- drop.tip(phy = tree, 
+                        tip = tree$tip.label[!tree$tip.label%in%dfBenthic$species_name], 
                         rooted = T)
 dfBenthic <- dfBenthic[match(benthicTree$tip.label, dfBenthic$species_name), ]
 dfBenthic <- as.data.frame(dfBenthic)
@@ -1535,25 +1482,25 @@ dfBenthic <- dfBenthic[, c(1:3, 5)]
 dfBenthic$Benthic.x <- relevel(dfBenthic$Benthic.x, ref = "0")
 dfRegression$Benthic <- relevel(dfRegression$Benthic, ref = "0")
 # Try using caper.
-c_data <- comparative.data(rootedWholeTree, dfBenthic, "species_name")
-caperBenthic <- pgls(branchLength ~ Benthic.x + numberOfNodes, c_data, 
+c_data <- comparative.data(tree, dfBenthic, "species_name")
+caperBenthic <- pgls(branch_length ~ Benthic.x + number_of_nodes, c_data, 
                      lambda = "ML")
 # D metric for phylogenetic signal.
 sigBenthic <- phylo.d(dfBenthic, benthicTree, names.col = species_name, 
                       binvar = Benthic.x)
 
-# TRAIT: LAKES
+## 10. Lakes.
 #lakes <- dfRegression$Lakes
-#names(lakes) <- rootedWholeTree$tip.label
-#fit <- fitDiscrete(rootedWholeTree, lakes, transform = "lambda")
+#names(lakes) <- tree$tip.label
+#fit <- fitDiscrete(tree, lakes, transform = "lambda")
 #fit$opt$lambda
 # Make sure the order of the data matches the constrained tree.
-dfRegression <- dfRegression[match(rootedWholeTree$tip.label, dfRegression$species_name), ]
+dfRegression <- dfRegression[match(tree$tip.label, dfRegression$species_name), ]
 # Merge so can get branch length info for UV.
 dfLakes <- merge(dfLakes, dfRegression, by = "species_name")
 # Prune constrained tree so only those tips for lat are present.
-lakeTree <- drop.tip(phy = rootedWholeTree, 
-                      tip = rootedWholeTree$tip.label[!rootedWholeTree$tip.label%in%dfLakes$species_name], rooted = T)
+lakeTree <- drop.tip(phy = tree, 
+                      tip = tree$tip.label[!tree$tip.label%in%dfLakes$species_name], rooted = T)
 dfLakes <- dfLakes[match(lakeTree$tip.label, dfLakes$species_name), ]
 dfLakes <- as.data.frame(dfLakes)
 row.names(dfLakes) <- dfLakes$species_name
@@ -1562,23 +1509,23 @@ dfLakes <- dfLakes[, c(1:3, 5)]
 dfLakes$Lakes.x <- relevel(dfLakes$Lakes.x, ref = "0")
 dfRegression$Lakes <- relevel(dfRegression$Lakes, ref = "0")
 # Try using caper.
-c_data <- comparative.data(rootedWholeTree, dfLakes, "species_name")
-caperLakes <- pgls(branchLength ~ Lakes.x + numberOfNodes, c_data, lambda = "ML")
+c_data <- comparative.data(tree, dfLakes, "species_name")
+caperLakes <- pgls(branch_length ~ Lakes.x + number_of_nodes, c_data, lambda = "ML")
 # D metric for phylogenetic signal.
 sigLakes <- phylo.d(dfLakes, lakeTree, names.col = species_name, binvar = Lakes.x)
 
-# TRAIT: STREAMS
+## 11. Streams.
 #streams <- dfRegression$Stream
-#names(streams) <- rootedWholeTree$tip.label
-#fit <- fitDiscrete(rootedWholeTree, streams, transform = "lambda")
+#names(streams) <- tree$tip.label
+#fit <- fitDiscrete(tree, streams, transform = "lambda")
 #fit$opt$lambda
 # Make sure the order of the data matches the constrained tree.
-dfRegression <- dfRegression[match(rootedWholeTree$tip.label, dfRegression$species_name), ]
+dfRegression <- dfRegression[match(tree$tip.label, dfRegression$species_name), ]
 # Merge so can get branch length info for UV.
 dfStreams <- merge(dfStreams, dfRegression, by = "species_name")
 # Prune constrained tree so only those tips for lat are present.
-streamTree <- drop.tip(phy = rootedWholeTree, 
-                      tip = rootedWholeTree$tip.label[!rootedWholeTree$tip.label%in%dfStreams$species_name], rooted = T)
+streamTree <- drop.tip(phy = tree, 
+                      tip = tree$tip.label[!tree$tip.label%in%dfStreams$species_name], rooted = T)
 dfStreams <- dfStreams[match(streamTree$tip.label, dfStreams$species_name), ]
 dfStreams <- as.data.frame(dfStreams)
 row.names(dfStreams) <- dfStreams$species_name
@@ -1587,23 +1534,23 @@ dfStreams <- dfStreams[, c(1:3, 5)]
 dfStreams$Stream.x <- relevel(dfStreams$Stream.x, ref = "0")
 dfRegression$Stream <- relevel(dfRegression$Stream, ref = "0")
 # Try using caper.
-c_data <- comparative.data(rootedWholeTree, dfStreams, "species_name")
-caperStreams <- pgls(branchLength ~ Stream.x + numberOfNodes, c_data, lambda = "ML")
+c_data <- comparative.data(tree, dfStreams, "species_name")
+caperStreams <- pgls(branch_length ~ Stream.x + number_of_nodes, c_data, lambda = "ML")
 # D metric for phylogenetic signal.
 sigStreams <- phylo.d(dfStreams, streamTree, names.col = species_name, binvar = Stream.x)
 
-# TRAIT: BODY SHAPE I
+## 12. Body Shape.
 #body_shape_I <- dfRegression$BodyShapeI
-#names(body_shape_I) <- rootedWholeTree$tip.label
-#fit <- fitDiscrete(rootedWholeTree, body_shape_I, transform = "lambda")
+#names(body_shape_I) <- tree$tip.label
+#fit <- fitDiscrete(tree, body_shape_I, transform = "lambda")
 #fit$opt$lambda
 # Make sure the order of the data matches the constrained tree.
-dfRegression <- dfRegression[match(rootedWholeTree$tip.label, dfRegression$species_name), ]
+dfRegression <- dfRegression[match(tree$tip.label, dfRegression$species_name), ]
 # Merge so can get branch length info for UV.
 dfBodyShapeI <- merge(dfBodyShapeI, dfRegression, by = "species_name")
 # Prune constrained tree so only those tips for lat are present.
-bodyTree <- drop.tip(phy = rootedWholeTree, 
-                       tip = rootedWholeTree$tip.label[!rootedWholeTree$tip.label%in%dfBodyShapeI$species_name], rooted = T)
+bodyTree <- drop.tip(phy = tree, 
+                       tip = tree$tip.label[!tree$tip.label%in%dfBodyShapeI$species_name], rooted = T)
 dfBodyShapeI <- dfBodyShapeI[match(bodyTree$tip.label, dfBodyShapeI$species_name), ]
 dfBodyShapeI <- as.data.frame(dfBodyShapeI)
 row.names(dfBodyShapeI) <- dfBodyShapeI$species_name
@@ -1612,8 +1559,8 @@ dfBodyShapeI <- dfBodyShapeI[, c(1:3, 5)]
 dfBodyShapeI$BodyShapeI.x <- relevel(dfBodyShapeI$BodyShapeI.x, ref = "fusiform / normal")
 dfRegression$BodyShapeI <- relevel(dfRegression$BodyShapeI, ref = "fusiform / normal")
 # Try using caper.
-c_data <- comparative.data(rootedWholeTree, dfBodyShapeI, "species_name")
-caperBodyShapeI <- pgls(branchLength ~ BodyShapeI.x + numberOfNodes, c_data, lambda = "ML")
+c_data <- comparative.data(tree, dfBodyShapeI, "species_name")
+caperBodyShapeI <- pgls(branch_length ~ BodyShapeI.x + number_of_nodes, c_data, lambda = "ML")
 anovaBSI <- anova.pgls.fixed(caperBodyShapeI)
 # D metric for phylogenetic signal.
 # Need dummy variables first.
@@ -1630,18 +1577,18 @@ sigBsEel <- phylo.d(dfDummyBs, bodyTree, names.col = species_name, binvar = EelL
 sigBsElong <- phylo.d(dfDummyBs, bodyTree, names.col = species_name, binvar = Elongated)
 sigBsShort <- phylo.d(dfDummyBs, bodyTree, names.col = species_name, binvar = Short)
 
-# FeedingType
+## 13. Feeding Type.
 #feeding_type <- dfRegression$FeedingType
-#names(feeding_type) <- rootedWholeTree$tip.label
-#fit <- fitDiscrete(rootedWholeTree, feeding_type, transform = "lambda")
+#names(feeding_type) <- tree$tip.label
+#fit <- fitDiscrete(tree, feeding_type, transform = "lambda")
 #fit$opt$lambda
 # Make sure the order of the data matches the constrained tree.
-dfRegression <- dfRegression[match(rootedWholeTree$tip.label, dfRegression$species_name), ]
+dfRegression <- dfRegression[match(tree$tip.label, dfRegression$species_name), ]
 # Merge so can get branch length info for UV.
 dfFeedingType <- merge(dfFeedingType, dfRegression, by = "species_name")
 # Prune constrained tree so only those tips for lat are present.
-feedingTypeTree <- drop.tip(phy = rootedWholeTree, 
-                        tip = rootedWholeTree$tip.label[!rootedWholeTree$tip.label%in%dfFeedingType$species_name], rooted = T)
+feedingTypeTree <- drop.tip(phy = tree, 
+                        tip = tree$tip.label[!tree$tip.label%in%dfFeedingType$species_name], rooted = T)
 dfFeedingType <- dfFeedingType[match(feedingTypeTree$tip.label, dfFeedingType$species_name), ]
 dfFeedingType <- as.data.frame(dfFeedingType)
 row.names(dfFeedingType) <- dfFeedingType$species_name
@@ -1650,8 +1597,8 @@ dfFeedingType <- dfFeedingType[, c(1:3, 5)]
 dfFeedingType$FeedingType.x <- relevel(dfFeedingType$FeedingType.x, ref = "hunting macrofauna (predator)")
 dfRegression$FeedingType <- relevel(dfRegression$FeedingType, ref = "hunting macrofauna (predator)")
 # Try using caper.
-c_data <- comparative.data(rootedWholeTree, dfFeedingType, "species_name")
-caperFeedingType <- pgls(branchLength ~ FeedingType.x + numberOfNodes, c_data, lambda = "ML")
+c_data <- comparative.data(tree, dfFeedingType, "species_name")
+caperFeedingType <- pgls(branch_length ~ FeedingType.x + number_of_nodes, c_data, lambda = "ML")
 anovaFeedingType <- anova.pgls.fixed(caperFeedingType)
 # D metric for phylogenetic signal.
 # Need dummy variables first.
@@ -1672,11 +1619,12 @@ sigGraze <- phylo.d(dfDummyFT, feedingTypeTree, names.col = species_name, binvar
 sigSel <- phylo.d(dfDummyFT, feedingTypeTree, names.col = species_name, binvar = SelPlankton)
 sigVar <- phylo.d(dfDummyFT, feedingTypeTree, names.col = species_name, binvar = Variable)
 
+### Multivariate (multiple regression) analyses ###
 # Manual stepwise model selection. Lowest BIC value.
 # First, get a dataframe of only those traits I am considering.
 dfMultivariate <- dfRegression[, c(1:2, 4, 46, 13:14, 5, 23, 7, 10, 16, 12, 32, 43)]
-colnames(dfMultivariate)[2] <- "branchLength"
-colnames(dfMultivariate)[3] <- "numberOfNodes"
+colnames(dfMultivariate)[2] <- "branch_length"
+colnames(dfMultivariate)[3] <- "number_of_nodes"
 dfMultivariate <- setDT(dfMultivariate)
 # First, order the columns by the amount of missing data (NA values).
 dfTraitsNA <- sort(dfMultivariate[, lapply(.SD, function(x) sum(is.na(x)))])
@@ -1733,17 +1681,17 @@ dfMultivariateCut <- dfMultivariateCut %>% filter(complete.cases(.))
 
 # Now for forward selection PGLS.
 # Prune constrained tree so only those tips that are needed are present.
-firstTree <- drop.tip(phy = rootedWholeTree, 
-                          tip = rootedWholeTree$tip.label[!rootedWholeTree$tip.label%in%dfMultivariateCut$species_name], rooted = T)
+firstTree <- drop.tip(phy = tree, 
+                          tip = tree$tip.label[!tree$tip.label%in%dfMultivariateCut$species_name], rooted = T)
 # Make sure the order of the data matches the constrained tree.
 dfMultivariateCut <- dfMultivariateCut[match(firstTree$tip.label, dfMultivariateCut$species_name), ]
 
 # Now check for data variability in this subset.
-hist(dfMultivariateCut$branchLength)
-range(dfMultivariateCut$branchLength)
+hist(dfMultivariateCut$branch_length)
+range(dfMultivariateCut$branch_length)
 
-hist(dfMultivariateCut$numberOfNodes)
-range(dfMultivariateCut$numberOfNodes)
+hist(dfMultivariateCut$number_of_nodes)
+range(dfMultivariateCut$number_of_nodes)
 
 hist(dfMultivariateCut$Length)
 range(dfMultivariateCut$Length)
@@ -1763,16 +1711,16 @@ table(dfMultivariateCut$Lakes)
 hist(dfMultivariateCut$age_at_maturity)
 range(dfMultivariateCut$age_at_maturity)
 
-lm.res=lm(branchLength ~ Length + DepthRangeDeep + median_lat
+lm.res=lm(branch_length ~ Length + DepthRangeDeep + median_lat
           + age_at_maturity, data = dfMultivariateCut)
 library(car)
 vif(mod=lm.res)  # Longevity removed.
 
 # Backward selection using BIC.
-c_data <- comparative.data(rootedWholeTree, dfMultivariateCut, names.col = "species_name", vcv=TRUE)
+c_data <- comparative.data(tree, dfMultivariateCut, names.col = "species_name", vcv=TRUE)
 
 # Full model.
-full <- pgls(branchLength ~ numberOfNodes + DepthRangeDeep
+full <- pgls(branch_length ~ number_of_nodes + DepthRangeDeep
              + Length + median_lat + age_at_maturity, data=c_data, lambda="ML")
 # Inspect for homogeneity.
 hist(full$phyres)
@@ -1781,7 +1729,7 @@ qqline(full$phyres)
 plot(x=fitted(full), y=full$phyres, pch=5)
 
 # Test for effect of bs.
-bs <- pgls(branchLength ~ numberOfNodes + DepthRangeDeep
+bs <- pgls(branch_length ~ number_of_nodes + DepthRangeDeep
              + Length + median_lat, 
               data=c_data, lambda="ML")
 anova(full, bs)
@@ -1791,7 +1739,7 @@ summary(full)
 summary(bs)
 
 # Test for effect of body shape.
-bs <- pgls(branchLength ~ numberOfNodes + DepthRangeDeep
+bs <- pgls(branch_length ~ number_of_nodes + DepthRangeDeep
            + Length + median_lat + Saltwater, 
                data=c_data, lambda="ML")
 BIC(lakes, bs)
@@ -1799,328 +1747,36 @@ BIC(lakes, bs)
 summary(lakes)$coefficients
 summary(bs)$coefficients
 
-null <- pgls(branchLength ~ numberOfNodes, data=c_data, lambda="ML")
+null <- pgls(branch_length ~ number_of_nodes, data=c_data, lambda="ML")
 anova(null, full, test="F")  # As a whole predictors are significant.
 summary(full)$coefficients
 
-### THIRD CODON POSITION: CONSTRAINED ###
-# Read in the tree.
-rootedThirdTree <- read.tree(file = "RAxML_bestTree.Third.PARTITION.1")
-rootedThirdTree$tip.label <- gsub("_", " ", rootedThirdTree$tip.label)
-# Root the tree.
-outgroups <- c("Echinorhinus cookei", "Echinorhinus brucus")
-rootedThirdTree <- root(rootedThirdTree, outgroup = outgroups, resolve.root = TRUE)
-
-################################################################################
-# TRAIT: NUMBER OF NODES
-# Let's first determine the number of nodes for each species.
-numberOfNodes <- distRoot(rootedThirdTree, tips = "all", method = "nNodes")
-# Make a dataframe of this information
-dfNumberOfNodes <- data.frame(numberOfNodes)
-dfNumberOfNodes$species_name <- row.names(dfNumberOfNodes)
-
-################################################################################
-# Merge with the node_number df.
-dfAllSeqsNode <- merge(dfAllSeqs, dfNumberOfNodes, by = "species_name", all = TRUE)
-
-# Let's calculate the sum of branch lengths now (from root to tip).
-#is.rooted(rootedThirdTree)
-#branchLengths <- distRoot(rootedThirdTree, tips = "all", method = "patristic")  # Takes a while.
-branchLengths <- diag(vcv.phylo(rootedThirdTree))  # Much faster.
-# Make into a dataframe.
-dfBranchLengths <- data.frame(branchLengths)
-colnames(dfBranchLengths)[1] <- "branchLength"
-dfBranchLengths$species_name <- names(branchLengths)
-hist(dfBranchLengths$branchLength, main = "", xlab = "Branch Length")
-median(dfBranchLengths$branchLength)
-mean(dfBranchLengths$branchLength)
-range(dfBranchLengths$branchLength)
-# Merge dfBranchLengths and dfRecodedPreCent.
-dfThirdRegression <- merge(dfBranchLengths, dfAllSeqsNode, by = "species_name")
-# Merge back to the trait dataframe.
-dfThirdRegression <- merge(dfThirdRegression, dfTraits, all.x = TRUE, by = "bin_uri")
-# Some reordering.
-dfThirdRegression <- dfThirdRegression[, c(2:4, 11, 15:56)]
-colnames(dfThirdRegression)[1] <- "species_name"
-colnames(dfThirdRegression)[3] <- "bin_size"
-
-
-### SECTION 5: STATISTICS ###
-# Check the traits for inclusion in MV analysis.
-# First, make sure the trait data and phylo tree are in the same order.
-# Make sure the order of the data matches the tree.
-dfThirdRegression <- dfThirdRegression[match(rootedWholeTree$tip.label, dfThirdRegression$species_name), ]
-
-# TRAIT: Branch length.
-# Pagel's lambda. A test for phylogenetic signal.
-branch_length <- dfThirdRegression$branchLength
-names(branch_length) <- rootedThirdTree$tip.label
-sigBL3 <- phylosig(rootedThirdTree, branch_length, method = "lambda", test = TRUE)
-
-# TRAIT: Number of nodes.
-dfThirdRegression <- as.data.frame(dfThirdRegression)
-dfNodes <- dfThirdRegression[, c(1:2, 4)]
-dfNodes <- as.data.frame(dfNodes)
-dfNodes <- dfNodes[!duplicated(row.names(dfNodes)), ]
-# Test using caper.
-row.names(dfNodes) <- dfNodes$species_name
-c_data <- comparative.data(rootedWholeTree, dfNodes, "species_name")
-caperNodes <- pgls(branchLength ~ numberOfNodes, c_data, lambda = "ML")
-
-# TRAIT: Median latitude.
-dfLatitude <- merge(dfLatitude, dfThirdRegression, by = "species_name")
-dfLatitude <- dfLatitude[, c(1:2, 5, 7)]
-# Test using caper.
-c_data <- comparative.data(rootedWholeTree, dfLatitude, "species_name")
-caperLatitude <- pgls(branchLength.y ~ median_lat.x + numberOfNodes.y, c_data, lambda = "ML")
-
-# TRAIT: Maximum length.
-dfMaxLength <- merge(dfMaxLength, dfThirdRegression, by = "species_name")
-dfMaxLength <- dfMaxLength[, c(1:2, 5, 7)]
-# Test using caper.
-c_data <- comparative.data(rootedWholeTree, dfMaxLength, "species_name")
-caperLength <- pgls(branchLength.y ~ Length.x + numberOfNodes.y, c_data, lambda = "ML")
-
-# TRAIT: Longevity.
-dfLongWild <- merge(dfLongWild, dfThirdRegression, by = "species_name")
-dfLongWild <- dfLongWild[, c(1:2, 5, 7)]
-# Test using caper.
-c_data <- comparative.data(rootedWholeTree, dfLongWild, "species_name")
-caperLong <- pgls(branchLength.y ~ LongevityWild.x + numberOfNodes.y, c_data, lambda = "ML")
-
-# TRAIT: Maximum depth
-# Merge so can get branch length info for third codon.
-dfDepthDeep <- merge(dfDepthDeep, dfThirdRegression, by = "species_name")
-dfDepthDeep <- dfDepthDeep[, c(1:2, 5, 7)]
-# Test using caper.
-c_data <- comparative.data(rootedWholeTree, dfDepthDeep, "species_name")
-caperDeep <- pgls(branchLength.y ~ DepthRangeDeep.x + numberOfNodes.y, c_data, lambda = "ML")
-
-# TRAIT: Age at maturity
-# Merge so can get branch length info for third codon.
-dfAgeMaturity <- merge(dfAgeMaturity, dfThirdRegression, by = "species_name")
-dfAgeMaturity <- dfAgeMaturity[, c(1:3, 5)]
-# Test using caper.
-c_data <- comparative.data(rootedWholeTree, dfAgeMaturity, "species_name")
-caperAge <- pgls(branchLength.y ~ age_at_maturity.x + numberOfNodes.y, c_data, lambda = "ML")
-
-# Discrete traits.
-# TRAIT: NERITIC
-# Merge so can get branch length info for third codon.
-dfNeritic <- merge(dfNeritic, dfThirdRegression, by = "species_name")
-dfNeritic <- dfNeritic[, c(1:2, 5, 7)]
-# Test using caper.
-c_data <- comparative.data(rootedWholeTree, dfNeritic, "species_name")
-caperNer <- pgls(branchLength.y ~ Neritic.x + numberOfNodes.y, c_data, lambda = "ML")
-
-# TRAIT: OCEANIC
-# Merge so can get branch length info for third codon.
-dfOceanic <- merge(dfOceanic, dfThirdRegression, by = "species_name")
-dfOceanic <- dfOceanic[, c(1:2, 5, 7)]
-# Test using caper.
-c_data <- comparative.data(rootedWholeTree, dfOceanic, "species_name")
-caperOceanic <- pgls(branchLength.y ~ Oceanic.x + numberOfNodes.y, c_data, lambda = "ML")
-
-# TRAIT: BENTHIC
-# Merge so can get branch length info for third codon.
-dfBenthic <- merge(dfBenthic, dfThirdRegression, by = "species_name")
-dfBenthic <- dfBenthic[, c(1:2, 5, 7)]
-# Test using caper.
-c_data <- comparative.data(rootedWholeTree, dfBenthic, "species_name")
-caperBenthic <- pgls(branchLength.y ~ Benthic.x + numberOfNodes.y, c_data, lambda = "ML")
-
-# TRAIT: LAKES
-# Merge so can get branch length info for third codon.
-dfLakes <- merge(dfLakes, dfThirdRegression, by = "species_name")
-dfLakes <- dfLakes[, c(1:2, 5, 7)]
-# Test using caper.
-c_data <- comparative.data(rootedWholeTree, dfLakes, "species_name")
-caperLakes <- pgls(branchLength ~ Lakes.x + numberOfNodes, c_data, lambda = "ML")
-
-# TRAIT: STREAMS
-# Merge so can get branch length info for third codon.
-dfStreams <- merge(dfStreams, dfThirdRegression, by = "species_name")
-dfStreams <- dfStreams[, c(1:2, 5, 7)]
-dfStreams <- as.data.frame(dfStreams)
-# Test using caper.
-c_data <- comparative.data(rootedWholeTree, dfStreams, "species_name")
-caperStreams <- pgls(branchLength.y ~ Stream.x + numberOfNodes.y, c_data, lambda = "ML")
-
-# TRAIT: BODY SHAPE I
-# Merge so can get branch length info for third codon.
-dfBodyShapeI <- merge(dfBodyShapeI, dfThirdRegression, by = "species_name")
-dfBodyShapeI <- dfBodyShapeI[, c(1:3, 7)]
-dfBodyShapeI <- as.data.frame(dfBodyShapeI)
-# Test using caper.
-c_data <- comparative.data(rootedWholeTree, dfBodyShapeI, "species_name")
-caperBodyShapeI <- pgls(branchLength.y ~ BodyShapeI.x + numberOfNodes.y, c_data, lambda = "ML")
-anovaBS <- anova.pgls.fixed(caperBodyShapeI)
-
-# FeedingType
-# Merge so can get branch length info for third codon.
-dfFeedingType <- merge(dfFeedingType, dfThirdRegression, by = "species_name")
-dfFeedingType <- dfFeedingType[, c(1:2, 5, 7)]
-# Test using caper.
-c_data <- comparative.data(rootedWholeTree, dfFeedingType, "species_name")
-caperFeedingType <- pgls(branchLength.y ~ FeedingType.x + numberOfNodes.y, c_data, lambda = "ML")
-anovaFT <- anova.pgls.fixed(caperFeedingType)
-
-# Manual stepwise model selection. Lowest BIC value.
-# First, get a dataframe of only those traits I am considering.
-dfMultivariate <- dfThird[, c(1:2, 46, 4:5, 14, 23)]
-dfMultivariate <- setDT(dfMultivariate)
-# First, order the columns by the amount of missing data (NA values).
-dfTraitsNA <- sort(dfMultivariate[, lapply(.SD, function(x) sum(is.na(x)))])
-# Reorder the original dfTraits. The columns with the least amount of NA values are now first.
-setcolorder(dfMultivariate, names(dfTraitsNA))
-rm(dfTraitsNA)
-# Now, count the number of NAs in each row.
-dfMultivariate[, count := rowSums(is.na(dfMultivariate))]
-# Sort the rows by this order.
-dfMultivariate <- dfMultivariate[order(count), ]
-# Remove this count column as it is no longer needed.
-dfMultivariate[, count := NULL]
-# The datatable is now sorted: columns with the least amount of NAs to the left, 
-# rows with with the least amount of NAs on top.
-# Now I want to loop through the traits, removing one column (trait) at a time
-# and count the number of complete cases. This will provide us some information
-# as to which traits would provide an adequate sample size for downstream analysis.
-# First, take the number of columns in dfTemp.
-len <- ncol(dfMultivariate)
-# Create a temporary variable to hold this number. This variable will hold the 
-# number of subsets to check at each iteration.
-tempLen <- len
-# Create a vector to hold the results of the loop.
-all.cc <- NULL
-# Start the loop:
-for (i in 1:len) {
-  # Works best if you set dfTemp back to a dataframe.
-  x <- as.data.frame(dfMultivariate)
-  # x is the placeholder dataframe in the loop.
-  x <- x[, 1:tempLen]
-  # Determine which rows are "complete" using the "tempLen" subset of traits.
-  x <- complete.cases(x)
-  # Complete rows of data will be "TRUE".
-  x <- which(x == "TRUE")
-  # Find the number of complete cases.
-  x <- length(x)
-  # Add it to the all.cc variable that's holding all of the results of the loop.
-  all.cc[i] <- x
-  # Minus 1 from tempLen so we can check the next subset of traits.
-  tempLen <- tempLen - 1
-}
-
-# Decide where to cut the datatable. (i.e. Pick an adequate subset of traits that
-# maximize sample size).
-# First, name it according to the trait columns.
-names(all.cc) <- rev(colnames(dfMultivariate))
-# Look at the results.
-all.cc
-# rep_guild_2 seems like a good cutoff point.
-which(colnames(dfMultivariate) == "age_at_maturity")
-dfMultivariateCut <- dfMultivariate[, 1:7] 
-# Finally, filter the original dfTraits datatable so only complete cases are kept.
-dfMultivariateCut <- dfMultivariateCut %>% filter(complete.cases(.))
-
-# Now for forward selection PGLS.
-# Prune constrained tree so only those tips that are needed are present.
-firstTree <- drop.tip(phy = rootedWholeTree, 
-                      tip = rootedWholeTree$tip.label[!rootedWholeTree$tip.label%in%dfMultivariateCut$species_name], rooted = T)
-# Make sure the order of the data matches the constrained tree.
-dfMultivariateCut <- dfMultivariateCut[match(firstTree$tip.label, dfMultivariateCut$species_name), ]
-
-# Now check for data variability in this subset.
-hist(dfMultivariateCut$branchLength)
-range(dfMultivariateCut$branchLength)
-
-hist(dfMultivariateCut$numberOfNodes)
-range(dfMultivariateCut$numberOfNodes)
-
-hist(dfMultivariateCut$Length)
-range(dfMultivariateCut$Length)
-
-hist(dfMultivariateCut$DepthRangeDeep)
-range(dfMultivariateCut$DepthRangeDeep)
-
-table(dfMultivariateCut$Lakes)
-
-table(dfMultivariateCut$BodyShapeI)
-
-hist(dfMultivariateCut$age_at_maturity)
-range(dfMultivariateCut$age_at_maturity)
-
-hist(dfMultivariateCut$LongevityWild)
-range(dfMultivariateCut$LongevityWild)
-
-lm.res=lm(branchLength ~ median_lat + Length +
-            CoralReefs + DepthRangeDeep +
-            age_at_maturity + LongevityWild, data = dfMultivariateCut)
-library(car)
-vif(mod=lm.res)  # Longevity removed.
-
-# Relevel traits.
-dfMultivariateCut$CoralReefs <- relevel(dfMultivariateCut$CoralReefs, ref = "0")
-dfMultivariateCut$Mangroves <- relevel(dfMultivariateCut$Mangroves, ref = "0")
-
-# Backward selection using BIC.
-c_data <- comparative.data(rootedWholeTree, dfMultivariateCut, names.col = "species_name", vcv=TRUE)
-
-# Full model.
-full <- pgls(branchLength ~ numberOfNodes + DepthRangeDeep + median_lat + 
-               Length + age_at_maturity, data=c_data, lambda = "ML")
-# Inspect for homogeneity.
-hist(full$phyres)
-qqnorm(full$phyres)
-qqline(full$phyres)
-plot(x=fitted(full), y=full$phyres, pch=5)
-
-# Test for effect of mangroves.
-mg <- pgls(branchLength ~ numberOfNodes + median_lat + Length +
-               CoralReefs + DepthRangeDeep + BodyShapeI, 
-           data=c_data, lambda="ML")
-BIC(full, mg)
-summary(full)
-summary(mg)
-# No effect so remove this trait.
-
-# Test for effect of body shape.
-bs <- pgls(branchLength ~ numberOfNodes + median_lat + Length +
-               CoralReefs + DepthRangeDeep, 
-             data=c_data, lambda="ML")
-BIC(mg, bs)
-summary(mg)
-summary(bg)
-# No effect so remove this trait.
-
-null <- pgls(branchLength ~ numberOfNodes, data=c_data, lambda="ML")
-anova(null, full, test="F")  # As a whole predictors are significant.
-
 # PLOTS!
 # Plot branch length vs. median lat.
-plot(branchLength ~ log(Length.x), dfMaxLength, pch = 19, 
+plot(branch_length ~ log(Length.x), dfMaxLength, pch = 19, 
      xlab = "Log(Maximum length (cm))", ylab = "Branch length")
-lm(dfDepthDeep$branchLength ~ dfDepthDeep$DepthRangeDeep.x)
+lm(dfDepthDeep$branch_length ~ dfDepthDeep$DepthRangeDeep.x)
 abline(a = 1.108e+00, b = -0.0000018, col = "red")
-with(dfLakes, plot(branchLength ~ Lakes.x, xlab = "Presence/absence in lakes",
+with(dfLakes, plot(branch_length ~ Lakes.x, xlab = "Presence/absence in lakes",
                         ylab = "Branch length", 
                         main = " "))
 axis(2, cex.axis = 1)
 
-ggplot(dfDepthDeep, aes(x = log(DepthRangeDeep.x), y=branchLength)) + geom_point(size=2, shape=19) + 
+ggplot(dfDepthDeep, aes(x = log(DepthRangeDeep.x), y=branch_length)) + geom_point(size=2, shape=19) + 
   geom_abline(intercept = 1.108, slope = 1.037e-05, size = 0.75, color = "red") + 
   labs(x="Log(Maximum depth (m))", y=expression(BL[WHOLE])) + 
   theme(panel.background = element_rect(fill = "grey95", colour = 'royalblue4'))
 
-ggplot(dfRegression, aes(branchLength)) + 
+ggplot(dfRegression, aes(branch_length)) + 
   geom_histogram(col="black",fill="deepskyblue1", alpha = .2) + 
   labs(x="Branch length", y="Frequency") + 
   theme(panel.background = element_rect(fill = "grey95", colour = 'royalblue4'))
 
-qplot(dfRegression$branchLength,
+qplot(dfRegression$branch_length,
       geom="histogram", 
       binwidth = 0.01)
 
-ggplot(dfCoralReefs, aes(x = CoralReefs.x, y = branchLength.y)) +
+ggplot(dfCoralReefs, aes(x = CoralReefs.x, y = branch_length.y)) +
   geom_boxplot() + labs(x="Coral Reef Presence/Absence", y="Branch length") + 
   theme(panel.background = element_rect(fill = "grey95", colour = 'royalblue4'))
 
@@ -2133,39 +1789,3 @@ png(filename="depthWhole.png",
     res=300)
 my_sc_plot(data)
 dev.off()
-
-
-# FUNCTION for factors with multiple levels.
-# This is a function that allows for use of discrete predictors with more than 
-# 2 levels in pgls.
-anova.pgls.fixed <- function (object) 
-{
-  data <- object$data
-  tlabels <- attr(terms(object$formula), "term.labels")
-  k <- object$k
-  n <- object$n
-  NR <- length(tlabels) + 1
-  rss <- resdf <- rep(NA, NR)
-  rss[1] <- object$NSSQ
-  resdf[1] <- n - 1
-  lm <- object$param["lambda"]
-  dl <- object$param["delta"]
-  kp <- object$param["kappa"]
-  for (i in 1:length(tlabels)) {
-    fmla <- as.formula(paste(object$namey, " ~ ", paste(tlabels[1:i], 
-                                                        collapse = "+")))
-    plm <- pgls(fmla, data, lambda = lm, delta = dl, kappa = kp)
-    rss[i + 1] <- plm$RSSQ
-    resdf[i + 1] <- (n - 1) - plm$k + 1
-  }
-  ss <- c(abs(diff(rss)), object$RSSQ)
-  df <- c(abs(diff(resdf)), n - k)
-  ms <- ss/df
-  fval <- ms/ms[NR]
-  P <- pf(fval, df, df[NR], lower.tail = FALSE)
-  table <- data.frame(df, ss, ms, f = fval, P)
-  table[length(P), 4:5] <- NA
-  dimnames(table) <- list(c(tlabels, "Residuals"), c("Df", "Sum Sq", "Mean Sq", 
-                                                     "F value", "Pr( > F)"))
-  structure(table, heading = c("Analysis of Variance Table", sprintf("Sequential SS for pgls: lambda = %0.2f, delta = %0.2f, kappa = %0.2f\n", lm, dl, kp), paste("Response:", deparse(formula(object)[[2L]]))), class = c("anova", "data.frame"))
-}

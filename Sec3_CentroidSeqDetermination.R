@@ -6,8 +6,7 @@
 #                      correlates affecting fish molecular evolution rates.
 
 # Advisors: Dr. Sarah J. Adamowicz and Dr. Zeny Feng.
-# Acknowlegements: Matt Orton for filtering steps/centroid sequence 
-#                  determination/reference sequence trimming (lines TBD).
+# Acknowlegements:  Centroid sequence selection (lines 38-111) designed by Matt Orton.
 
 ################################################################################
 
@@ -35,77 +34,72 @@ source("refSeqTrim.R")
 
 ################################################################################
 
-# Subset dataframe to find BINs with more than one sequence.These are the BINs 
-# that will require centroid sequences.
+# Subset dataframe to find BINs with more than one sequence.
 largeBins <- which(dfPreCentroid$filtered_bin_size > 1)
 
-# If there is at least one BIN with more than one member, then a dataframe 
-# dfCentroidSeqs will be created with those BINs.
+# If there is at least one BIN with more than one member...
 if (length(largeBins) > 0) {
   
   # Remove gaps from the sequences.
   dfPreCentroid[, nucleotides := gsub("-", "", nucleotides)] 
   
-  # Subset out the larger BINs.
+  # Subset out the BINs with more than 1 sequence.
   dfCentroidSeqs <- dfPreCentroid[largeBins, ]
   
-  # Find the number of unique BINs in dfCentroidSeqs. 
+  # How many unique BINs are in dfCentroidSeqs? 
   binNumberCentroid <- unique(dfCentroidSeqs$bin_uri)
   binNumberCentroid <- length(binNumberCentroid)
   
   # We also have to create another separate dataframe with BINs that only have 
-  # one member called dfSingletons.
+  # one member, called dfSingletons.
   dfSingletons <- dfPreCentroid[-largeBins, ]
   
-  # We then take the dfCentroidSeqs sequences and break it down into a list with 
-  # each element being a unique BIN. 
+  # We then take the dfCentroidSeqs sequences and group them by BIN.
   largeBinList <- lapply(unique(dfCentroidSeqs$bin_uri), 
                          function(x) dfCentroidSeqs[dfCentroidSeqs$bin_uri == x,])
   
-  # Extract record id from each BIN.
+  # Extract the recordID from each BIN.
   largeBinRecordId <- lapply(largeBinList, function(x) (x$recordID))
   
-  # Convert all of the sequences in the largeBinList to dnaStringSet format for 
-  # the alignment step.
+  # Convert all the sequences in largeBinList to DNAStringSet format for 
+  # multiple sequence alignment.
   DNAStringSet1 <- lapply(largeBinList, function(x) DNAStringSet(x$nucleotides))
   
-  # Name DNAStringSet with the record ids.
+  # Name DNAStringSet1 using the recordIDs.
   for (i in seq(from = 1, to = binNumberCentroid, by = 1)) {
     names(DNAStringSet1[[i]]) <- largeBinRecordId[[i]]
   }
   
-  # Alignment using muscle.
+  # Align the sequences in each BIN using MUSCLE.
   alignment1 <- lapply(DNAStringSet1, function(x) 
     muscle::muscle(x, diags = TRUE, gapopen = -3000))
   
-  # We can then convert each alignment to DNAbin format.
+  # Convert each BIN alignment to DNAbin format.
   dnaBINCentroid <- lapply(alignment1, function(x) as.DNAbin(x))
   
-  # Then, we perform genetic distance determination with the TN93 model on each 
-  # DNAbin list.
+  # Estimates the genetic distance between sequences in each BIN with the TN93 model.
   geneticDistanceCentroid <- lapply(dnaBINCentroid, function(x) 
     dist.dna(x, model = "TN93", as.matrix = TRUE, pairwise.deletion = TRUE))
   
-  # The centroid sequence can be determined from the distance matrix alone.
+  # Find the centroid sequence using the genetic distance matrix.
   # It is the sequence in a BIN with minimum average pairwise distance to all 
-  # other sequences in its BIN.
+  # other sequences.
   centroidSeq <- lapply(geneticDistanceCentroid, function(x) 
     which.min(rowSums(x)))
   centroidSeq <- unlist(centroidSeq)
   centroidSeq <- names(centroidSeq)
   centroidSeq <- as.numeric(centroidSeq)
   
-  # Subset dfCentroidSeqs by the record ids on this list.
+  # Subset dfCentroidSeqs by the recordIDs of the centroid sequences.
   dfCentroidSeqs <- subset(dfCentroidSeqs, recordID %in% centroidSeq)
   
-  # Append our singletons to our centroid sequences. We will make a new 
-  # dataframe for this - dfAllSeqs. 
-  # Now we have all of the sequences we need for the next alignment of all 
-  # sequences, with one sequence representing each BIN.
+  # Combine the singletons and centroid sequences into a new dataframe:
+  # dfAllSeqs. Now each BIN has a representative sequence.
   dfAllSeqs <- rbind(dfCentroidSeqs, dfSingletons)
   
 } else {
   
+  # Centroid sequence selection not required if all BINs are singletons.
   dfAllSeqs <- dfPreCentroid
   
 }
@@ -123,13 +117,7 @@ dfAllSeqs <- dfAllSeqs[-dup_majority_species,]
 
 ################################################################################
 # REFERENCE SEQUENCE TRIMMING #
-# In this section we establish reference sequences that will be used for 
-# appropriate trimming of the alignment to a standard sequence length of 620 bp.
-# That length was chosen as many sequences are slightly shorter than the 
-# standard barcode region. Moreover, base calling errors are more frequent 
-# towards the ends of the sequences. These reference sequences are manually 
-# curated from the literature, thereby ensuring high sequence quality. They 
-# are also specific to the taxon being analyzed.
+# Trim the centroid sequences according to a standardized reference sequence.
 # Currently, a standard length (658 bp) COI-5P sequence from Perca flavescens 
 # (yellow perch) is being used to trim Actinopterygii barcode sequences.
 

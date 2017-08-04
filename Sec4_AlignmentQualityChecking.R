@@ -6,8 +6,6 @@
 #                      correlates affecting fish molecular evolution rates.
 
 # Advisors: Dr. Sarah J. Adamowicz and Dr. Zeny Feng.
-# Acknowlegements: Matt Orton for filtering steps/centroid sequence 
-#                  determination/reference sequence trimming (lines TBD).
 
 ################################################################################
 
@@ -59,7 +57,7 @@ extremeSeqs <- foreach(i = 1:nrow(dfCheckAllSeqs)) %do%
 # The "deviant" sequences will be flagged with a 1.
 extremeBins <- which(extremeSeqs > 0)
 # Subset out these sequences to look at them if desired.
-dfExtreme <- dfCheckAllSeqs[extremeBins, ] # Need BIN names not index numbers.
+dfExtreme <- dfCheckAllSeqs[extremeBins, ]
 # Make sure outgroups are not removed.
 goodBins <- which(dfExtreme$order_name == "Acanthuriformes")
 dfExtreme <- dfExtreme[-goodBins, ]
@@ -102,7 +100,7 @@ dfAllSeqs <- dfAllSeqs[-outliers, ]
 
 ### NEAREST NEIGHBOUR CHECK ###
 # Remove centroid sequences whose nearest neighbours are in a different order or 
-# family. The nearest neighbour can be determined from the distance matrix alone.
+# family. The nearest neighbour can be determined from the distance matrix.
 # It is the sequence with minimum pairwise distance to the sequence in question.
 
 ## FUNCTION: NearestNeighbour ##
@@ -246,10 +244,7 @@ dfAllSeqsNO <- refSeqTrim(dfAllSeqsNO)
 
 # Now re-run the alignment including outgroups (pick outgroup species that are
 # well represented and that serve as appropriate outgroup to your taxa).
-goodOG <- which(dfAllSeqs$species_name == "Boreogadus saida" |
-                  dfAllSeqs$species_name == "Gadus morhua" |
-                  dfAllSeqs$species_name == "Larimichthys polyactis" |
-                  dfAllSeqs$species_name == "Acanthurus triostegus")
+goodOG <- which(dfAllSeqs$species_name == "Acanthurus triostegus")
 mergeOG <- dfAllSeqs[goodOG, ]
 # Add them back.
 dfAllSeqsWithOG <- rbind(dfAllSeqsNO, mergeOG)

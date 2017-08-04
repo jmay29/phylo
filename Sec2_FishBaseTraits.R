@@ -6,8 +6,7 @@
 #                      correlates affecting fish molecular evolution rates.
 
 # Advisors: Dr. Sarah J. Adamowicz and Dr. Zeny Feng.
-# Acknowlegements: Matt Orton for filtering steps/centroid sequence 
-#                  determination/reference sequence trimming (lines TBD).
+# Acknowlegements: Matt Orton for contributions to the latitude trait section (lines 34-47).
 
 ################################################################################
 
@@ -32,14 +31,12 @@ source("GetTraitSpecificData.R")
 ################################################################################
 
 ### TRAIT: MEDIAN LATITUDE ###
-# Currently, median latitude and latitudinal range are the only traits whose 
-# information is taken from BOLD. The rest of the data will be obtained from 
-# FishBase.
+# Currently, median latitude is the only trait whose information is taken from 
+# BOLD. The rest of the data will be obtained from FishBase.
 # Filtering for presence of a latitude value.
 containLat <- dfFiltered[, grep("[0-9]", lat)]
 dfLatitudeSpecies <- dfFiltered[containLat, ]
-# Convert the latitude (lat) column to number instead of character type. This is
-# necessary for median and range calculations.
+# Convert the latitude (lat) column to number instead of character type
 dfLatitudeSpecies[, lat_num := as.numeric(lat)]
 # Conversion to absolute values before median latitude values are calculated.
 dfLatitudeSpecies[, abs_lat_num := abs(lat_num)]
@@ -48,9 +45,8 @@ dfLatitudeSpecies[, median_lat := median(abs_lat_num), keyby = bin_uri]
 
 # While considering traits for eventual multivariate analyses, it is necessary
 # for them to have an adequate sample size (i.e. over x # rows of data, depending
-# on your purposes).
-# In addition, they should exhibit some amount of variation across the 
-# observations.
+# on your purposes). In addition, they should exhibit some amount of variation across 
+# the observations.
 # TRAIT: Latitude.
 # Use the GetTraitSpecificDataBIN function to obtain a subset of data for those 
 # species that have latitude data available.

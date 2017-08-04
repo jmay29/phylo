@@ -6,8 +6,6 @@
 #                      correlates affecting fish molecular evolution rates.
 
 # Advisors: Dr. Sarah J. Adamowicz and Dr. Zeny Feng.
-# Acknowlegements: Matt Orton for filtering steps/centroid sequence 
-#                  determination/reference sequence trimming (lines TBD).
 
 ################################################################################
 

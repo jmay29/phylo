@@ -1,7 +1,7 @@
 # Function: RefSeqTrim ##
 # Purpose: Trims nucleotide sequences in a dataframe according to a given
 #          reference sequence.
-# Acknowlegements: This function adapted from code provided by Matt Orton.
+# Acknowlegements: This function adapted from code provided by Matt Orton (https://github.com/m-orton/R-Scripts).
 RefSeqTrim <- function(data) {
   # Insert your reference sequence here!
   dfRefSeqs <- data.frame(taxa = c(""), nucleotides = c(""))

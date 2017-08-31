@@ -1,14 +1,15 @@
 ## FUNCTION: GetTraitSpecificDataBIN ##
 # Purpose: Filters for presence of trait data. This function is for the 
-# univariate analyses section.
+#          univariate analyses section.
 GetTraitSpecificDataBIN <- function(x, y) {
-  # Filters a dataframe for only those data related to a specified trait.
-  # x = dataframe of species and trait information.
-  # y = trait.
+  # Filters a dataframe for only those rows that have data available for a 
+  # certain trait.
+  # x = Dataframe of species and trait information.
+  # y = Trait of interest.
   
   # Make sure x is in dataframe format.
   x <- as.data.frame(x)
-  # Find rows without data for column.
+  # Find rows without data for the trait (NA values).
   noY <- is.na(x[, y])
   noY <- which(noY == "TRUE")
   # Construct the univariate trait datatable. This datatable will be used in the 

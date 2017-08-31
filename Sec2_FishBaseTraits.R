@@ -5,8 +5,9 @@
 # Advisors: Dr. Sarah J. Adamowicz and Dr. Zeny Feng.
 
 # Contributions & Acknowledgements #
-# Matt Orton for contributions to the latitude trait section (lines 51-62).
-# Adapted lines 198-199 and 318-322 from code shared in Stack Overflow 
+# Matt Orton (https://github.com/m-orton/R-Scripts) for contributions to the 
+# latitude trait section (lines 52-63).
+# Adapted lines 199-200 and 319-323 from code shared in Stack Overflow 
 # discussion:
 # Author: https://stackoverflow.com/users/403310/matt-dowle.
 # https://stackoverflow.com/questions/13273833/merging-multiple-data-table.

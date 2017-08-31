@@ -5,10 +5,10 @@
 # Advisors: Dr. Sarah J. Adamowicz and Dr. Zeny Feng.
 
 # Contributions & Acknowledgements #
-# Matt Orton for design/testing/contributions to the sequence filters 
-# (lines 84-95, 146-170).
+# Matt Orton (https://github.com/m-orton/R-Scripts) for design/testing/contributions 
+# to the sequence filters (lines 84-95, 146-170).
 # Dr. Robert Hanner for recommendations about how to deal with BIN data.
-# Adapted lines 320, 324, 329, 333 and  342-344 from code shared in Stack 
+# Adapted lines 320, 324, 329, 333 and 342-344 from code shared in Stack 
 # Overflow discussions:
 # Author: https://stackoverflow.com/users/559784/arun.
 # https://stackoverflow.com/questions/32766325/fastest-way-of-determining-most-frequent-factor-in-a-grouped-data-frame-in-dplyr.

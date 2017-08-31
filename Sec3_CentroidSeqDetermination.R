@@ -5,7 +5,7 @@
 # Advisors: Dr. Sarah J. Adamowicz and Dr. Zeny Feng.
 
 # Contributions & Acknowledgements #
-# Centroid sequence selection (lines 49-101) designed by Matt Orton.
+# Centroid sequence selection (lines 49-101) designed by Matt Orton (https://github.com/m-orton/R-Scripts).
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by

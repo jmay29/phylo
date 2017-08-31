@@ -14,7 +14,7 @@
 # Mundry, R. (2014). Statistical Issues and Assumptions of 
 # Phylogenetic Generalized Least Squares. In L.Z. Garamszegi (Ed.), 
 # Modern Phylogenetic Comparative Methods and Their Application in 
-# Evolutionary Biology. Online Practice Materials 
+# Evolutionary Biology. Online Practice Materials.
 # URL: http://www.mpcm-evolution.org/practice/online-practical-material-chapter-6/chapter-6-1exercises-testing-assumptions-statistical-issues-framework-phylogenetic-generalized-least-squares
 
 # This program is free software: you can redistribute it and/or modify

@@ -1,26 +1,51 @@
-################################################################################
-
-# # Copyright Jacqueline May (C) 2017.
+# # Copyright (C) 2017 Jacqueline May.
 # Project: MSc of Bioinformatics Thesis.
-# Program Description: Multivariate analysis of environmental and biological 
+# Program Description: Multivariable analysis of environmental and biological 
 #                      correlates affecting fish molecular evolution rates.
-
 # Advisors: Dr. Sarah J. Adamowicz and Dr. Zeny Feng.
+
+# Contributions & Acknowledgements #
+# Adapted lines 156-160 and 403-407 from code shared in Stack Overflow discussion:
+# Author: https://stackoverflow.com/users/1312519/by0.
+# https://stackoverflow.com/questions/12866189/calculating-the-outliers-in-r.
+# Author: https://stackoverflow.com/users/580110/henk.
+# https://stackoverflow.com/questions/24016612/subset-of-data-frame-columns-to-maximize-complete-observations.
+# Used as general guide for PGLS analyses (lines 189-389 and 468-512):
+# Mundry, R. (2014). Statistical Issues and Assumptions of 
+# Phylogenetic Generalized Least Squares. In L.Z. Garamszegi (Ed.), 
+# Modern Phylogenetic Comparative Methods and Their Application in 
+# Evolutionary Biology. Online Practice Materials 
+# URL: http://www.mpcm-evolution.org/practice/online-practical-material-chapter-6/chapter-6-1exercises-testing-assumptions-statistical-issues-framework-phylogenetic-generalized-least-squares
+
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+
+# There is a copy of the GNU General Public License
+# along with this program in the repository where it is located. 
+# Or view it directly here at http://www.gnu.org/licenses/
 
 ################################################################################
 
 ##### SECTION 5: STATISTICAL ANALYSES #####
-# This is the section where the univariate analyses are performed as a form
-# of model selection.
+# This section is designed to perform single variable and multivariable analyses
+# regression analyses while controlling for phylogeny. The main objective is to
+# identify those variables that contribute most to variation in branch length 
+# (molecular evolution rate) in fish. Tests to detect the amount of 
+# phylogenetic signal in a trait are also performed.
 
 ### PACKAGES REQUIRED ###
-
 # For data manipulation:
 #install.packages("data.table")
 library(data.table)
 #install.packages("dplyr")
 library(dplyr)
-
 # For phylogenetic tree manipulation and analysis:
 #install.packages("adephylo")
 library(adephylo)
@@ -30,74 +55,147 @@ library(ape)
 library(caper)
 #install.packages("phytools")
 library(phytools)
-
 # For statistical analysis/graphs:
 #install.packages("car")
 library(car)
 #install.packages("ggplot2")
-library(ggplot)
+library(ggplot2)
 #install.packages("gtools")
 library(gtools)
-
-# Load the function(s) that I designed for this script:
+#install.packages("Rmisc")
+library(Rmisc)
+# Load the function(s) designed for this script:
 source("TestPhyloSig.R")
 
 ################################################################################
 
-# First, read in your phylogenetic tree.
-mainTree <- read.tree(file = "RAxML_labelledTree.EPAPercTreeAug2")
+# A phylogenetic tree containing branch length data for your species is 
+# required for this section.
+
+# Read in your phylogenetic tree.
+mainTree <- read.tree(file = "")
+# Fixing the tip labels.
 mainTree$tip.label <- gsub("_", " ", mainTree$tip.label)
-# Re-name the outgroup.
-mainTree$tip.label <- gsub("QUERY   ", "", mainTree$tip.label)
-# Root the tree.
-outgroups <- c("Acanthurus triostegus")
+# Root the tree using your chosen outgroup species.
+outgroups <- c("")
 mainTree <- root(mainTree, outgroup = outgroups, resolve.root = TRUE)
+# Match mainTree with data subset. This will ensure the tree has only the tips
+# we need for data analysis.
+mainTree <- drop.tip(phy = mainTree, 
+                     tip = mainTree$tip.label[!mainTree$tip.label %in% 
+                                              dfCentroidSeqsWithOG$species_name])
 
 ### TRAIT: NUMBER OF NODES.
 # Let's first determine the number of nodes for each species. This will be used
-# as a control variable in the multiple regression analysis (to account for the
-# node density effect).
+# as a control variable in the multivariable regression analysis (to account 
+# for the node density effect).
 number_of_nodes <- distRoot(mainTree, tips = "all", method = "nNodes")
 # Make a dataframe of this information
 dfNumberOfNodes <- data.frame(number_of_nodes)
 dfNumberOfNodes$species_name <- row.names(dfNumberOfNodes)
-# Merge with dfAllSeqsNode.
-dfAllSeqsNode <- merge(dfAllSeqsWithOG, dfNumberOfNodes, by = "species_name")
+# Merge with dfCentroidSeqsWithOG.
+dfSeqsNodes <- merge(dfCentroidSeqsWithOG, dfNumberOfNodes, 
+                     by = "species_name")
 
 ### TRAIT: BRANCH LENGTHS.
-# Let's calculate the sum of branch lengths now (from root to tip). These values
-# will serve as our measurement of molecular evolution rate.
-branch_lengths <- distRoot(mainTree, tips = "all", method = "patristic")
-# Make into a dataframe.
-dfBranchLengths <- data.frame(branch_lengths)
-colnames(dfBranchLengths)[1] <- "branch_length"
-dfBranchLengths$species_name <- names(branch_lengths)
+# Let's calculate the sum of branch lengths now (from root to tip). These
+# values will serve as our measurement of molecular evolution rate.
+branch_length <- distRoot(mainTree, tips = "all", method = "patristic")
+# Convert to dataframe format.
+dfBranchLengths <- data.frame(branch_length)
+dfBranchLengths$species_name <- names(branch_length)
 # Check the distribution of the branch lengths.
 hist(dfBranchLengths$branch_length, main = "", xlab = "Branch Length")
 # Some more stats.
 median(dfBranchLengths$branch_length)
 mean(dfBranchLengths$branch_length)
 range(dfBranchLengths$branch_length)
-# Merge dfBranchLengths and dfAllSeqsNode.
-dfRegression <- merge(dfBranchLengths, dfAllSeqsNode, by = "species_name")
+# Range within which 95% of the values fall.
+q <- quantile(dfBranchLengths$branch_length, probs = c(.025, .975))
+q
+# Which groups exhibit extreme low rates?
+shortBranchLengths <- which(dfBranchLengths$branch_length < q[1])
+dfShortBranchLengths <- dfBranchLengths[shortBranchLengths, ]
+# Get the higher tax classifications.
+dfShortBranchLengths <- merge(dfShortBranchLengths, dfCentroidSeqsNO, 
+                              by = "species_name")
+table(dfShortBranchLengths$order_name)
+table(dfShortBranchLengths$family_name)
+table(dfShortBranchLengths$genus_name)
+# Get the trait data.
+dfShortBranchLengths <- merge(dfShortBranchLengths, dfTraits, 
+                              by = "species_name")
+# One row per species. 
+dfShortBranchLengths <- dfShortBranchLengths[!duplicated(dfShortBranchLengths$species_name), ] 
+# Anything interesting?
+median(dfShortBranchLengths$median_lat, na.rm = T)
+median(dfShortBranchLengths$longevity, na.rm = T)
+median(dfShortBranchLengths$max_length, na.rm = T)
+table(dfShortBranchLengths$salinity)
+median(dfShortBranchLengths$age_at_maturity, na.rm = T)
+# Which groups exhibit extreme high rates?
+longBranchLengths <- which(dfBranchLengths$branch_length > q[2])
+dfLongBranchLengths <- dfBranchLengths[longBranchLengths, ]
+# Get the higher tax classifications.
+dfLongBranchLengths <- merge(dfLongBranchLengths, dfCentroidSeqsNO, 
+                             by = "species_name")
+table(dfLongBranchLengths$order_name)
+table(dfLongBranchLengths$family_name)
+table(dfLongBranchLengths$genus_name)
+# Get the trait data.
+dfLongBranchLengths <- merge(dfLongBranchLengths, dfTraits, by = "species_name")
+median(dfLongBranchLengths$median_lat, na.rm = T)
+median(dfLongBranchLengths$longevity, na.rm = T)
+median(dfLongBranchLengths$max_length, na.rm = T)
+table(dfLongBranchLengths$salinity)
+median(dfLongBranchLengths$age_at_maturity, na.rm = T)
+
+# Take a closer look at branch length outliers. Some contaminated sequences 
+# might have STILL gotten through, so it is best to check!
+# Using the IQR to detect statistical outliers.
+lowerQuantile <- quantile(dfBranchLengths$branch_length)[2]
+upperQuantile <- quantile(dfBranchLengths$branch_length)[4]
+iqr <- upperQuantile - lowerQuantile
+upperThreshold <- (iqr * 3) + upperQuantile
+lowerThreshold <-  lowerQuantile - (iqr * 3)
+exShortBranchLengths <- which(dfBranchLengths$branch_length < lowerThreshold)
+dfCheckShort <- dfBranchLengths[exShortBranchLengths, ]
+dfCheckShort <- merge(dfCheckShort, dfCentroidSeqsNO, by = "species_name")
+exLongBranchLengths <- which(dfBranchLengths$branch_length > upperThreshold)
+dfCheckLong <- dfBranchLengths[exLongBranchLengths, ]
+dfCheckLong <- merge(dfCheckLong, dfCentroidSeqsNO, by = "species_name")
+# BLAST these and/or remove from dataset, if desired.
+# Short branch outliers.
+if (nrow(dfCheckShort) > 0) {
+  dfBranchLengths <- dfBranchLengths[!dfBranchLengths$species_name %in% 
+                                     dfCheckShort$species_name, ]
+}
+# Long branch outliers.
+if (nrow(dfCheckLong) > 0) {
+  dfBranchLengths <- dfBranchLengths[!dfBranchLengths$species_name %in% 
+                                     dfCheckLong$species_name, ]
+}
+
+# Merge dfBranchLengths and dfSeqsNodes.
+dfRegression <- merge(dfBranchLengths, dfSeqsNodes, by = "species_name")
 # Merge back to the traits dataframe.
 dfRegression <- merge(dfRegression, dfTraits, all.x = T, by = "bin_uri")
 # Some reordering.
-dfRegression <- dfRegression[, c(1:2, 4, 3, 11, 15:23)]
+dfRegression <- dfRegression[, c(1:2, 4, 3, 11, 15:22)]
 # Renaming for consistency purposes.
 colnames(dfRegression)[2] <- "species_name"
 colnames(dfRegression)[3] <- "filtered_bin_size"
 
-### Univariate analyses ###
-# Running a univariate PGLS regression analysis for each trait to determine
-# whether significance can be detected. If so, they will be included in the 
-# multiple regression model selection process.
+### SINGLE VARIABLE REGRESSION ANALYSIS ###
+# Running a single variable PGLS regression analysis for each trait to 
+# determine whether significance can be detected. If so, they will be included 
+# in the multivariable regression model selection process.
 
 # First, make sure the trait data and phylo tree are in the same order.
 # Make sure the order of the data matches the tree.
 mainTree <- drop.tip(phy = mainTree, 
-                     tip = mainTree$tip.label[!mainTree$tip.label%in%dfRegression$species_name], 
-                     rooted = T)
+                     tip = mainTree$tip.label[!mainTree$tip.label %in% 
+                                              dfRegression$species_name])
 dfRegression <- dfRegression[match(mainTree$tip.label, 
                                    dfRegression$species_name), ]
 
@@ -112,11 +210,11 @@ sigBL <- TestPhyloSig(dfRegression, "branch_length", mainTree,
 # Estimate phylogenetic signal.
 sigNodes <- TestPhyloSig(dfRegression, "number_of_nodes", mainTree, 
                          type = "continuous")
-# Now, make a univariate dataframe for number_of_nodes.
+# Now, make a single variable dataframe for number_of_nodes.
 dfNodes <- dfRegression[, c("species_name", "branch_length", "number_of_nodes")]
 # Perform a PGLS analysis using caper.
-# First, we must make a comparative.data object to ensure the tree tips and data
-# match.
+# First, we must make a comparative.data object to ensure the tree tips and 
+# data match.
 c_data <- comparative.data(mainTree, dfNodes, "species_name", vcv = TRUE)
 # PGLS. Does the trait have a significant effect on branch length?
 # Note: Number of nodes will be included as a control variable in
@@ -128,7 +226,7 @@ caperNodes <- pgls(branch_length ~ number_of_nodes, c_data, lambda = "ML")
 # Estimate phylogenetic signal.
 sigLat <- TestPhyloSig(dfRegression, "median_lat", mainTree, 
                        type = "continuous")
-# Merge univariate dataframe to dfRegression to get branch length data.
+# Merge single variable dataframe to dfRegression to get branch length data.
 dfLatitude <- merge(dfLatitude, dfRegression, by.x = "species_label", 
                     by.y = "species_name")
 dfLatitude <- dfLatitude[, .(species_name = species_label, branch_length, 
@@ -142,13 +240,14 @@ dfLatitude <- as.data.frame(dfLatitude)
 # Perform a PGLS analysis using caper.
 c_data <- comparative.data(mainTree, dfLatitude, "species_name", vcv = TRUE)
 # PGLS. Does the trait have a significant effect on branch length?
-caperLatitude <- pgls(branch_length ~ number_of_nodes + median_lat, c_data, lambda = "ML")
+caperLatitude <- pgls(branch_length ~ number_of_nodes + median_lat, c_data, 
+                      lambda = "ML")
 
 ## 4. Maximum length.
 # Estimate phylogenetic signal.
 sigLength <- TestPhyloSig(dfRegression, "max_length", mainTree, 
                           type = "continuous")
-# Merge univariate dataframe to dfRegression to get branch length data.
+# Merge single variable dataframe to dfRegression to get branch length data.
 dfMaxLength <- merge(dfMaxLength, dfRegression, by = "species_name")
 dfMaxLength <- dfMaxLength[, .(species_name, branch_length, number_of_nodes, 
                                max_length = max_length.y)]
@@ -157,28 +256,14 @@ dfMaxLength <- as.data.frame(dfMaxLength)
 # Perform a PGLS analysis using caper.
 c_data <- comparative.data(mainTree, dfMaxLength, "species_name", vcv = TRUE)
 # PGLS. Does the trait have a significant effect on branch length?
-caperMaxLength <- pgls(branch_length ~ number_of_nodes + max_length, c_data, lambda = "ML")
+caperMaxLength <- pgls(branch_length ~ number_of_nodes + max_length, c_data, 
+                       lambda = "ML")
 
-## 5. Maximum depth.
-# Estimate phylogenetic signal.
-sigDepth <- TestPhyloSig(dfRegression, "max_depth", mainTree, 
-                         type = "continuous")
-# Merge univariate dataframe to dfRegression to get branch length data.
-dfMaxDepth <- merge(dfMaxDepth, dfRegression, by = "species_name")
-dfMaxDepth <- dfMaxDepth[, .(species_name, branch_length, number_of_nodes, 
-                             max_depth = max_depth.y)]
-# Make sure it is of the dataframe format.
-dfMaxDepth <- as.data.frame(dfMaxDepth)
-# Perform a PGLS analysis using caper.
-c_data <- comparative.data(mainTree, dfMaxDepth, "species_name", vcv = TRUE)
-# PGLS. Does the trait have a significant effect on branch length?
-caperMaxDepth <- pgls(branch_length ~ number_of_nodes + max_depth, c_data, lambda = "ML")
-
-## 6. Longevity.
+## 5. Longevity.
 # Estimate phylogenetic signal.
 sigLong <- TestPhyloSig(dfRegression, "longevity", mainTree, 
                         type = "continuous")
-# Merge univariate dataframe to dfRegression to get branch length data.
+# Merge single variable dataframe to dfRegression to get branch length data.
 dfLongWild <- merge(dfLongWild, dfRegression, by = "species_name")
 dfLongWild <- dfLongWild[, .(species_name, branch_length, number_of_nodes, 
                              longevity = longevity.y)]
@@ -187,13 +272,14 @@ dfLongWild <- as.data.frame(dfLongWild)
 # Perform a PGLS analysis using caper.
 c_data <- comparative.data(mainTree, dfLongWild, "species_name", vcv = TRUE)
 # PGLS. Does the trait have a significant effect on branch length?
-caperLongevity <- pgls(branch_length ~ number_of_nodes + longevity, c_data, lambda = "ML")
+caperLongevity <- pgls(branch_length ~ number_of_nodes + longevity, c_data, 
+                       lambda = "ML")
 
-## 7. Age at maturity.
+## 6. Age at maturity.
 # Estimate phylogenetic signal.
 sigAge <- TestPhyloSig(dfRegression, "age_at_maturity", mainTree, 
                        type = "continuous")
-# Merge univariate dataframe to dfRegression to get branch length data.
+# Merge single variable dataframe to dfRegression to get branch length data.
 dfAgeMaturity <- merge(dfAgeMaturity, dfRegression, by = "species_name")
 dfAgeMaturity <- dfAgeMaturity[, .(species_name, branch_length, number_of_nodes, 
                                    age_at_maturity = age_at_maturity.y)]
@@ -202,31 +288,12 @@ dfAgeMaturity <- as.data.frame(dfAgeMaturity)
 # Perform a PGLS analysis using caper.
 c_data <- comparative.data(mainTree, dfAgeMaturity, "species_name", vcv = TRUE)
 # PGLS. Does the trait have a significant effect on branch length?
-caperAgeMaturity <- pgls(branch_length ~ number_of_nodes + age_at_maturity, c_data, lambda = "ML")
+caperAgeMaturity <- pgls(branch_length ~ number_of_nodes + age_at_maturity, 
+                         c_data, lambda = "ML")
 
 # Discrete traits.
-## 8. Streams.
-# Merge univariate dataframe to dfRegression to get branch length data.
-dfStreams <- merge(dfStreams, dfRegression, by = "species_name")
-dfStreams <- dfStreams[, .(species_name, branch_length, number_of_nodes, 
-                           streams = streams.y)]
-# Make sure it is of the dataframe format.
-dfStreams <- as.data.frame(dfStreams)
-# Relevel the trait according to the category I want to be the reference.
-dfStreams$streams <- relevel(dfStreams$streams, ref = "0")
-# Also relevel the trait in dfRegression.
-dfRegression$streams <- relevel(dfRegression$streams, ref = "0")
-# Estimate phylogenetic signal.
-sigStreams <- TestPhyloSig(dfStreams, "streams", mainTree, type = "discrete")
-# Make sure it is of the dataframe format.
-dfStreams <- as.data.frame(dfStreams)
-# Perform a PGLS analysis using caper.
-c_data <- comparative.data(mainTree, dfStreams, "species_name", vcv = TRUE)
-# PGLS. Does the trait have a significant effect on branch length?
-caperStreams <- pgls(branch_length ~ number_of_nodes + streams, c_data, lambda = "ML")
-
-## 9. Lakes.
-# Merge univariate dataframe to dfRegression to get branch length data.
+## 7. Lakes.
+# Merge single variable dataframe to dfRegression to get branch length data.
 dfLakes <- merge(dfLakes, dfRegression, by = "species_name")
 dfLakes <- dfLakes[, .(species_name, branch_length, number_of_nodes, 
                        lakes = lakes.y)]
@@ -238,110 +305,112 @@ dfLakes$lakes <- relevel(dfLakes$lakes, ref = "0")
 dfRegression$lakes <- relevel(dfRegression$lakes, ref = "0")
 # Estimate phylogenetic signal.
 sigLakes <- TestPhyloSig(dfLakes, "lakes", mainTree, type = "discrete")
-# Make sure it is of the dataframe format.
-dfLakes <- as.data.frame(dfLakes)
 # Perform a PGLS analysis using caper.
 c_data <- comparative.data(mainTree, dfLakes, "species_name", vcv = TRUE)
 # PGLS. Does the trait have a significant effect on branch length?
-caperLakes <- pgls(branch_length ~ number_of_nodes + lakes, c_data, lambda = "ML")
+caperLakes <- pgls(branch_length ~ number_of_nodes + lakes, c_data, 
+                   lambda = "ML")
 
-## 10. Body Shape.
-# Merge univariate dataframe to dfRegression to get branch length data.
-dfBodyShape <- merge(dfBodyShape, dfRegression, by = "species_name")
-dfBodyShape <- dfBodyShape[, .(species_name, branch_length, number_of_nodes, 
-                               body_shape = body_shape.y)]
+## 8. Streams.
+# Merge single variable dataframe to dfRegression to get branch length data.
+dfStreams <- merge(dfStreams, dfRegression, by = "species_name")
+dfStreams <- dfStreams[, .(species_name, branch_length, number_of_nodes, 
+                           streams = streams.y)]
+# Make sure it is of the dataframe format.
+dfStreams <- as.data.frame(dfStreams)
 # Relevel the trait according to the category I want to be the reference.
-dfBodyShape$body_shape <- relevel(dfBodyShape$body_shape, ref = "fusiform / normal")
+dfStreams$streams <- relevel(dfStreams$streams, ref = "0")
 # Also relevel the trait in dfRegression.
-dfRegression$body_shape <- relevel(dfRegression$body_shape, ref = "fusiform / normal")
+dfRegression$streams <- relevel(dfRegression$streams, ref = "0")
+# Estimate phylogenetic signal.
+sigStreams <- TestPhyloSig(dfStreams, "streams", mainTree, type = "discrete")
+# Perform a PGLS analysis using caper.
+c_data <- comparative.data(mainTree, dfStreams, "species_name", vcv = TRUE)
+# PGLS. Does the trait have a significant effect on branch length?
+caperStreams <- pgls(branch_length ~ number_of_nodes + streams, c_data, 
+                     lambda = "ML")
+
+## 9. Salinity.
+# Merge single variable dataframe to dfRegression to get branch length data.
+dfSalinity <- merge(dfSalinity, dfRegression, by = "species_name")
+dfSalinity <- dfSalinity[, .(species_name, branch_length, number_of_nodes, 
+                             salinity = salinity.y)]
+# Make sure it is of the dataframe format.
+dfSalinity <- as.data.frame(dfSalinity)
+# Relevel the trait according to the category I want to be the reference.
+dfSalinity$salinity <- relevel(dfSalinity$salinity, ref = "freshwater")
+# Also relevel the trait in dfRegression.
+dfRegression$salinity <- relevel(dfRegression$salinity, ref = "freshwater")
+# Estimate phylogenetic signal.
+sigSalinity <- TestPhyloSig(dfSalinity, "salinity", mainTree, type = "discrete")
+# Perform a PGLS analysis using caper.
+c_data <- comparative.data(mainTree, dfSalinity, "species_name", vcv = TRUE)
+# PGLS. Does the trait have a significant effect on branch length?
+caperSalinity <- pgls(branch_length ~ number_of_nodes + salinity, c_data, 
+                      lambda = "ML")
+
+## 10. Parental Care
+# Merge single variable dataframe to dfRegression to get branch length data.
+dfParentalCare <- merge(dfParentalCare, dfRegression, by = "species_name")
+dfParentalCare <- dfParentalCare[, .(species_name, branch_length, 
+                                     number_of_nodes, 
+                                     parental_care = parental_care.y)]
+# Relevel the trait according to the category I want to be the reference.
+dfParentalCare$parental_care <- relevel(dfParentalCare$parental_care, 
+                                        ref = "none")
+# Also relevel the trait in dfRegression.
+dfRegression$parental_care <- relevel(dfRegression$parental_care, ref = "none")
 # Estimate phylogenetic signal.
 # As there are several categories for this trait, I need to create a dataframe 
 # of dummy variables first in order to estimate the D metric (it only considers
 # binary traits).
-dfDummyBs <- model.matrix(~ body_shape - 1, data = dfBodyShape)
-dfDummyBs <- as.data.frame(dfDummyBs)
-dfDummyBs$species_name <- dfBodyShape$species_name
-colnames(dfDummyBs)[1] <- "elongated"
-colnames(dfDummyBs)[2] <- "fusiform"
-colnames(dfDummyBs)[3] <- "short"
+dfDummyPc <- model.matrix(~ parental_care - 1, data = dfParentalCare)
+dfDummyPc <- as.data.frame(dfDummyPc)
+dfDummyPc$species_name <- dfParentalCare$species_name
+colnames(dfDummyPc)[1] <- "none"
+colnames(dfDummyPc)[2] <- "biparental"
+colnames(dfDummyPc)[3] <- "maternal"
+colnames(dfDummyPc)[4] <- "paternal"
 # Now estimate phylogenetic signal separately for each category.
-sigElongated <- TestPhyloSig(dfDummyBs, "elongated", mainTree, type = "discrete")
-sigFusiform <- TestPhyloSig(dfDummyBs, "fusiform", mainTree, type = "discrete")
-sigShort <- TestPhyloSig(dfDummyBs, "short", mainTree, type = "discrete")
-# Make sure it is of the dataframe format.
-dfBodyShape <- as.data.frame(dfBodyShape)
+sigNone <- TestPhyloSig(dfDummyPc, "none", mainTree, type = "discrete")
+sigBipar <- TestPhyloSig(dfDummyPc, "biparental", mainTree, type = "discrete")
+sigMat <- TestPhyloSig(dfDummyPc, "maternal", mainTree, type = "discrete")
+sigPat <- TestPhyloSig(dfDummyPc, "paternal", mainTree, type = "discrete")
+# Make sure it is in dataframe format.
+dfParentalCare <- as.data.frame(dfParentalCare)
 # Perform a PGLS analysis using caper.
-c_data <- comparative.data(mainTree, dfBodyShape, "species_name", vcv = TRUE)
+c_data <- comparative.data(mainTree, dfParentalCare, "species_name", vcv = TRUE)
 # PGLS. Does the trait have a significant effect on branch length?
-caperBodyShape <- pgls(branch_length ~ number_of_nodes + body_shape, c_data, lambda = "ML")
-# Since it is a multi-level factor, let's see what the p-value is for the entire trait
-# by performing an ANOVA.
+caperParentalCare <- pgls(branch_length ~ number_of_nodes + parental_care, 
+                          c_data, lambda = "ML")
+# Since it is a multi-level factor, let's see what the p-value is for the 
+# entire trait by performing an ANOVA.
 caperControl <- pgls(branch_length ~ number_of_nodes, c_data, lambda = "ML")
-anova(caperControl, caperBodyShape)
+anova(caperControl, caperParentalCare)
 
-## 11. Feeding Type.
-# Merge univariate dataframe to dfRegression to get branch length data.
-dfFeedingType <- merge(dfFeedingType, dfRegression, by = "species_name")
-dfFeedingType <- dfFeedingType[, .(species_name, branch_length, number_of_nodes, 
-                                   feeding_type = feeding_type.y)]
-# Relevel the trait according to the category I want to be the reference.
-dfFeedingType$feeding_type <- relevel(dfFeedingType$feeding_type, ref = "hunting macrofauna (predator)")
-# Also relevel the trait in dfRegression.
-dfRegression$feeding_type <- relevel(dfRegression$feeding_type, ref = "hunting macrofauna (predator)")
-# Estimate phylogenetic signal.
-# As there are several categories for this trait, I need to create a dataframe 
-# of dummy variables first in order to estimate the D metric (it only considers
-# binary traits).
-dfDummyFt <- model.matrix(~ feeding_type - 1, data = dfFeedingType)
-dfDummyFt <- as.data.frame(dfDummyFt)
-dfDummyFt$species_name <- dfFeedingType$species_name
-colnames(dfDummyFt)[1] <- "hunting"
-colnames(dfDummyFt)[2] <- "browsing"
-colnames(dfDummyFt)[3] <- "grazing"
-colnames(dfDummyFt)[4] <- "selective"
-colnames(dfDummyFt)[5] <- "variable"
-# Now estimate phylogenetic signal separately for each category.
-sigHunting <- TestPhyloSig(dfDummyFt, "hunting", mainTree, type = "discrete")
-sigBrowsing <- TestPhyloSig(dfDummyFt, "browsing", mainTree, type = "discrete")
-sigGrazing <- TestPhyloSig(dfDummyFt, "grazing", mainTree, type = "discrete")
-sigSelective <- TestPhyloSig(dfDummyFt, "selective", mainTree, type = "discrete")
-sigVariable <- TestPhyloSig(dfDummyFt, "variable", mainTree, type = "discrete")
-# Make sure it is of the dataframe format.
-dfFeedingType <- as.data.frame(dfFeedingType)
-# Perform a PGLS analysis using caper.
-c_data <- comparative.data(mainTree, dfFeedingType, "species_name", vcv = TRUE)
-# PGLS. Does the trait have a significant effect on branch length?
-caperFeedingType <- pgls(branch_length ~ number_of_nodes + feeding_type, c_data, lambda = "ML")
-caperControl <- pgls(branch_length ~ number_of_nodes, c_data, lambda = "ML")
-anova(caperControl, caperFeedingType)
-
-### Multivariate (multiple regression) analyses ###
-# Manual stepwise model selection. Lowest BIC value.
+### MULTIVARIABLE REGRESSION ANALYSIS ###
+# First, we must find the most complete dataset that we can use for our model
+# selection process. So we will remove traits with smaller sample sizes that 
+# don't overlap with data from other traits.
 # First, get a dataframe of only those traits I am considering.
-dfMultivariate <- dfRegression[, c("species_name", "branch_length", "number_of_nodes", 
-                                   "median_lat", "longevity", "max_length", "max_depth",
-                                   "age_at_maturity")]
+dfMultivariable <- dfRegression[, c("species_name", "branch_length", 
+                                    "number_of_nodes",  "median_lat", 
+                                    "longevity", "max_length", 
+                                    "age_at_maturity", "salinity", "lakes")]
 # Set to datatable.
-dfMultivariate <- setDT(dfMultivariate)
+dfMultivariable <- setDT(dfMultivariable)
 # We want the most complete dataset possible given our traits.
 # First, order the columns by the amount of missing data (NA values).
-dfTraitsNA <- sort(dfMultivariate[, lapply(.SD, function(x) sum(is.na(x)))])
+dfTraitsNA <- sort(dfMultivariable[, lapply(.SD, function(x) sum(is.na(x)))])
 # Reorder the original dfTraits. The columns with the least amount of NA values 
-# are now first.
-setcolorder(dfMultivariate, names(dfTraitsNA))
-# Now, count the number of NAs in each row.
-dfMultivariate[, count := rowSums(is.na(dfMultivariate))]
-# Sort the rows by this order.
-dfMultivariate <- dfMultivariate[order(count), ]
-# Remove this count column as it is no longer needed.
-dfMultivariate[, count := NULL]
-# The datatable is now sorted: columns with the least amount of NAs to the left, 
-# rows with with the least amount of NAs on top.
+# will now be first.
+setcolorder(dfMultivariable, names(dfTraitsNA))
 # Now I want to loop through the traits, removing one column (trait) at a time
 # and count the number of complete cases. This will provide us some information
-# as to which traits would provide an adequate sample size for downstream analysis.
-# First, take the number of columns in dfMultivariate.
-len <- ncol(dfMultivariate)
+# as to which traits would provide an adequate sample size for downstream 
+# analysis.
+# First, take the number of columns in dfMultivariable.
+len <- ncol(dfMultivariable)
 # Create a temporary variable to hold this number. This variable will hold the 
 # number of subsets to check at each iteration.
 tempLen <- len
@@ -349,8 +418,8 @@ tempLen <- len
 all.cc <- NULL
 # Start the loop:
 for (i in 1:len) {
-  # Works best if you set dfMultivariate back to a dataframe.
-  x <- as.data.frame(dfMultivariate)
+  # Works best if you set dfMultivariable back to a dataframe.
+  x <- as.data.frame(dfMultivariable)
   # x is the placeholder dataframe in the loop.
   x <- x[, 1:tempLen]
   # Determine which rows are "complete" using the "tempLen" subset of traits.
@@ -367,89 +436,114 @@ for (i in 1:len) {
 # Now, decide where to cut the datatable. (i.e. pick an adequate subset of 
 # traits that maximize sample size).
 # First, name it according to the trait columns.
-names(all.cc) <- rev(colnames(dfMultivariate))
+names(all.cc) <- rev(colnames(dfMultivariable))
 # Look at the results.
 all.cc
-# max_depth seems like a good cutoff point.
-which(colnames(dfMultivariate) == "max_depth")
-dfMultivariateCut <- dfMultivariate[, 1:6] 
-# Finally, filter the original dfTraits datatable so only complete cases are kept.
-dfMultivariateCut <- dfMultivariateCut %>% filter(complete.cases(.))
+# What seems like a good cut off point?
+which(colnames(dfMultivariable) == "longevity")
+dfMultivariableCut <- dfMultivariable[, 1:8] 
+# Finally, filter the original dfTraits datatable so only complete cases 
+# are kept.
+dfMultivariableCut <- dfMultivariableCut %>% filter(complete.cases(.))
 
-# Now check for data variability in this subset.
-hist(dfMultivariateCut$branch_length)
-range(dfMultivariateCut$branch_length)
+# Now check for data variability in this subset so our tests will actually
+# work.
+hist(dfMultivariableCut$branch_length)
+range(dfMultivariableCut$branch_length)
 
-hist(dfMultivariateCut$number_of_nodes)
-range(dfMultivariateCut$number_of_nodes)
+hist(dfMultivariableCut$number_of_nodes)
+range(dfMultivariableCut$number_of_nodes)
 
-hist(dfMultivariateCut$median_lat)
-range(dfMultivariateCut$median_lat)
+hist(dfMultivariableCut$median_lat)
+range(dfMultivariableCut$median_lat)
 
-hist(dfMultivariateCut$max_length)
-range(dfMultivariateCut$max_length)
+hist(dfMultivariableCut$max_length)
+range(dfMultivariableCut$max_length)
 
-hist(dfMultivariateCut$max_depth)
-range(dfMultivariateCut$max_depth)
+hist(dfMultivariableCut$longevity)
+range(dfMultivariableCut$longevity)
+
+table(dfMultivariableCut$salinity)
 
 # Check for multicollinearity between variables using the variance inflation
-# factor (vif), if desired.
-lm.res <- lm(branch_length ~ max_length + max_depth + median_lat, data = dfMultivariateCut)
-vif(mod = lm.res)
+# factor (vif), if desired. Multicollinearity can lead to errors in the
+# estimations of our coefficients.
+fit <- lm(branch_length ~ max_length + median_lat + salinity + longevity
+          + lakes, data = dfMultivariableCut)
+vif(mod = fit)
 
-# Backward selection using BIC.
+# MODEL SELECTION #
+# In this section we will perform manual stepwise model selection. 
+# We will remove one trait at a time (usually the one with the highest p-value
+# and examine the R squared and BIC values for each model.
+# The model with the lowest BIC value and/or highest R squared will serve as
+# our best-fit model.
+
 # First, create the comparative.data object.
-c_data <- comparative.data(mainTree, dfMultivariateCut, names.col = "species_name", 
+c_data <- comparative.data(mainTree, dfMultivariableCut, 
+                           names.col = "species_name", 
                            vcv = TRUE)
 # Now, let's perform a PGLS regression analysis using all of the variables.
-full <- pgls(branch_length ~ number_of_nodes + max_depth
-             + max_length + median_lat, data = c_data, lambda = "ML")
-# Inspect for homogeneity.
-hist(full$phyres)
-qqnorm(full$phyres)
-qqline(full$phyres)
-plot(x = fitted(full), y = full$phyres, pch = 5)
+# This is our "global" model.
+global <- pgls(branch_length ~ number_of_nodes +  median_lat + longevity 
+               + salinity + lakes + max_length, data = c_data, lambda = "ML")
+# Check that the phylogenetic residuals are normal.
+hist(global$phyres)
+qqnorm(global$phyres)
+qqline(global$phyres)
+plot(x = fitted(global), y = global$phyres, pch = 5)
 
-# Let's remove max_depth first.
-fit1 <- pgls(branch_length ~ number_of_nodes + median_lat
+# Remove variables one at a time see if the fit of the model improves. 
+fit1 <- pgls(branch_length ~ number_of_nodes + longevity + salinity + lakes 
              + max_length, data = c_data, lambda = "ML")
-# Compare the model to the full model using ANOVA and BIC.
-anova(full, fit1)
-BIC(full, fit1)
+# Compare the model to the global model using BIC.
+BIC(global, fit1)
 
-# Remove median_lat.
-fit2 <- pgls(branch_length ~ number_of_nodes + max_length, 
-             data = c_data, lambda = "ML")
-# Compare the model to the full model using ANOVA and BIC.
-anova(fit1, fit2)
+# Remove another variable.
+fit2 <- pgls(branch_length ~ number_of_nodes + longevity + salinity 
+             + max_length, data = c_data, lambda = "ML")
+# Compare the model to the global model using BIC.
 BIC(fit1, fit2)
+
+# Remove another variable.
+fit3 <- pgls(branch_length ~ number_of_nodes + longevity 
+             + max_length, data = c_data, lambda = "ML")
+# Compare the model to the global model using BIC.
+BIC(fit2, fit)
+
+# Continue process until you find the model with the lowest BIC value and/or
+# highest R squared value.
+
+# GRAPHS #
+# Now you can plot some of your data using ggplot.
+# Plot the branch length data.
+ggplot(data = dfBranchLengths, aes(log(branch_length))) + 
+  labs(x = expression(log(BL[WHOLE])), y = "Frequency") +
+  geom_histogram(col="black", 
+                 fill="skyblue2") +
+  theme(panel.background = element_rect(fill = "grey95", colour = 'royalblue4'))
 
 # Now let's plot some of the trait data against branch length using ggplot.
 
 # Maximum length.
 # First calculate a line of best fit.
+# Log transforming the length data to improve visualization of the data.
 lm(dfMaxLength$branch_length ~ log(dfMaxLength$max_length))
 # Scatterplot.
 ggplot(dfMaxLength, aes(x = log(max_length), y = branch_length)) + 
-  geom_point(size = 2, shape = 19) + geom_abline(intercept = 0.54564, 
-                                                 slope = -0.01343, size = 0.75, color = "red") + 
-  labs(x = "Log(Maximum length (cm))", y = expression(BL[WHOLE])) + 
+  geom_point(size = 2, shape = 19) + geom_abline(intercept = 0.416729, 
+                                                 slope = -0.004051, 
+                                                 size = 0.75, color = "red") + 
+  labs(x = "Log(Maximum length) (cm)", y = expression(BL[WHOLE])) + 
   theme(panel.background = element_rect(fill = "grey95", colour = 'royalblue4'))
 
-# Age at maturity.
-lm(dfAgeMaturity$branch_length ~ log(dfAgeMaturity$age_at_maturity))
-ggplot(dfAgeMaturity, aes(x = log(age_at_maturity), y = branch_length)) 
-+ geom_point(size = 2, shape = 19) + geom_abline(intercept = 0.48558, 
-                                                 slope = -0.02061, size = 0.75, color = "red") + 
-  labs(x = "Log(Maximum length (cm))", y = expression(BL[WHOLE])) + 
+# Median latitude.
+# First calculate a line of best fit.
+lm(dfLatitude$branch_length ~ dfLatitude$median_lat)
+# Scatterplot.
+ggplot(dfLatitude, aes(x = median_lat, y = branch_length)) + 
+  geom_point(size = 2, shape = 19) + geom_abline(intercept = 0.4049763, 
+                                                 slope = -0.0001124, 
+                                                 size = 0.75, color = "red") + 
+  labs(x = "Median latitude", y = expression(BL[WHOLE])) + 
   theme(panel.background = element_rect(fill = "grey95", colour = 'royalblue4'))
-
-# Save the image in your current directory.
-png(filename="ageVsBranchLength.png", 
-    units="in", 
-    width=7, 
-    height=5, 
-    pointsize=12, 
-    res=300)
-my_sc_plot(data)
-dev.off()

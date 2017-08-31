@@ -2,16 +2,24 @@
 # Purpose:  Resolves BINs with taxonomic conflicts by either removing records or
 #           the BIN itself from a dataframe.
 ResolveBIN <- function(x, y, method = c("bin_uri","recordID")){
-  # x = Either the BIN or recordID to be removed.
-  # y = Dataframe to apply function to.
+  # x = Dataframe to apply function to.
+  # y = Either the BIN or recordID to be removed.
   # method = Specify whether the item to be removed is a BIN or a recordID.
+  
+  # Is it a BIN or record?
   method <- match.arg(method)
+  # If it's a BIN...
   if(method == "bin_uri") {
-    rmThisBIN <- which(y$bin_uri == x)
-    resolved <- y[-rmThisBIN, ]
+    # Identify the indices.
+    rmThisBIN <- which(X$bin_uri == Y)
+    # Remove from the dataframe.
+    resolved <- x[-rmThisBIN, ]
   } else if(method == "recordID") {
-    rmThisRecord <- which(y$recordID == x)
-    resolved <- y[-rmThisRecord, ]
+    # Identify the indices.
+    rmThisRecord <- which(x$recordID == y)
+    # Remove from the dataframe.
+    resolved <- x[-rmThisRecord, ]
   }
+  # Return the resolved dataframe.
   return(resolved)
 }

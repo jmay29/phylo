@@ -11,7 +11,7 @@ ResolveBIN <- function(x, y, method = c("bin_uri","recordID")){
   # If it's a BIN...
   if(method == "bin_uri") {
     # Identify the indices.
-    rmThisBIN <- which(X$bin_uri == Y)
+    rmThisBIN <- which(x$bin_uri == y)
     # Remove from the dataframe.
     resolved <- x[-rmThisBIN, ]
   } else if(method == "recordID") {

@@ -98,14 +98,14 @@ fishBaseSpecies <- allFish$fullName  # 33104 species names.
 # Match the species labels from BOLD with the species names from FishBase.
 # Make fishBaseSpecies into a dataframe first so it can be merged with 
 # dfFiltered.
-dfFishBaseSpecies <- data.table(fishBaseSpecies)
+dfFishBaseSpecies <- data.frame(fishBaseSpecies)
 colnames(dfFishBaseSpecies)[1] <- "species_name"
 # These are the names that match.
 dfBoldBase <- merge(dfFiltered, dfFishBaseSpecies, by = "species_name")
 # Extract species' name as a vector if trying to access trait information
 # for first time (aka if you haven't saved trait info in your current working
 # directory (CWD) yet).
-speciesNames <- dfBoldBase[, unique(species_name)]
+speciesNames <- unique(dfBoldBase$species_name)
 
 ### TRAIT ASSIGNMENT AND RECODING SECTION ###
 # As there are multiple entries per species for some traits, I want to take the 
@@ -323,7 +323,6 @@ colnames(dfTraits)[4] <- "filtered_bin_size"
 # Remove species that don't have ANY trait information available.
 dfMissing <- dfTraits[apply(dfTraits[, c(5:12)], 1, function(x) all(is.na(x)))]
 dfTraits <- dfTraits[!dfTraits$bin_uri %in% dfMissing$bin_uri]
-
 # Merge back to dfFiltered to obtain all of the sequence information for 
 # each BIN. This is for creation of the master phylogeny. 
 dfPreCentroid <- merge(dfFiltered, dfTraits, by = "bin_uri")

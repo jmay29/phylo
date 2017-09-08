@@ -8,7 +8,7 @@
 # Matt Orton (https://github.com/m-orton/R-Scripts) for design/testing/contributions 
 # to the sequence filters (lines 86-95, 142-164).
 # Dr. Robert Hanner for recommendations about how to deal with BIN data.
-# Adapted lines 320, 324, 329, 333 and 342-344 from code shared in Stack 
+# Adapted lines 311, 314, 318, 321 and 330-332 from code shared in Stack 
 # Overflow discussions:
 # Author: https://stackoverflow.com/users/559784/arun.
 # https://stackoverflow.com/questions/32766325/fastest-way-of-determining-most-frequent-factor-in-a-grouped-data-frame-in-dplyr.
@@ -179,7 +179,7 @@ dfSpecies <- dfFiltered[grep("[A-Z]", species_name)]
 # information.
 speciesBins <- dfSpecies[, unique(bin_uri)]
 # Subset out these BINs in dfFiltered.
-dfResolve <- dfFiltered[dfFiltered$bin_uri %in% speciesBins, ]
+dfResolve <- dfFiltered[dfFiltered$bin_uri %in% speciesBins]
 
 # RESOLVING TAXONOMIC CONFLICTS.
 # These steps are performed to improve BIN reliability and ensure we are 
@@ -235,7 +235,7 @@ dfResolve[, number_of_genera := length(unique(genus_name[!is.na(genus_name)])),
 # Find number of BINs with genus level conflicts.
 genusConflicts <- CountConflicts(dfResolve, "number_of_genera")
 # Create a new datatable for BINs with genus level conflicts.
-dfGenusConflicts <- dfResolve[genusConflicts, ]
+dfGenusConflicts <- dfResolve[bin_uri %in% genusConflicts]
 # Now we must determine the most common genus and if it has at least 80% 
 # consistency in sequences that DO have genus level information.
 # Only looking at sequences with genus classifications.
@@ -266,14 +266,14 @@ dfAcceptedGenus <- dfGenusConflicts[which(majority_genus_percentage > 0.80)]
 # Find the UNACCEPTED conflicted bins and remove them from dfResolve.
 # unacceptedBins = BINs in genusConflicts which were not accepted.
 unacceptedBins <- setdiff(genusConflicts, dfAcceptedGenus[, unique(bin_uri)])
-dfResolve <- dfResolve[!dfResolve$bin_uri %in% unacceptedBins, ]
+dfResolve <- dfResolve[!dfResolve$bin_uri %in% unacceptedBins]
 
 # # Species level conflicts.
 # Repeat the same process for species as we did for genera.
 dfResolve[, number_of_species := length(unique(species_name[!is.na(species_name)])), 
           keyby = bin_uri]
 speciesConflicts <- CountConflicts(dfResolve, "number_of_species")
-dfSpeciesConflicts <- dfResolve[speciesConflicts, ]
+dfSpeciesConflicts <- dfResolve[bin_uri %in% speciesConflicts]
 dfSpeciesConflicts <- dfSpeciesConflicts[grep("[A-Z]", species_name)]
 dfSpeciesConflicts[, number_of_seqs := length(recordID), by = bin_uri]
 dfSpeciesConflicts <- dfSpeciesConflicts[which(number_of_seqs >= 10)]
@@ -291,7 +291,7 @@ dfAcceptedSpecies <- dfSpeciesConflicts[which(majority_species_percentage > 0.80
 # Find the UNACCEPTED conflicted bins and remove them from dfResolve.
 # unacceptedBins = BINs in genusConflicts which were not accepted.
 unacceptedBins <- setdiff(speciesConflicts, dfAcceptedSpecies[, unique(bin_uri)])
-dfResolve <- dfResolve[!dfResolve$bin_uri %in% unacceptedBins, ]
+dfResolve <- dfResolve[!dfResolve$bin_uri %in% unacceptedBins]
 
 ################################################################################
 ### TRAIT: POST FILTER BIN SIZE ###

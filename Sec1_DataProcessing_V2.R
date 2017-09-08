@@ -6,9 +6,9 @@
 
 # Contributions & Acknowledgements #
 # Matt Orton (https://github.com/m-orton/R-Scripts) for design/testing/contributions 
-# to the sequence filters (lines 86-95, 142-164).
+# to the sequence filters (lines 83-92, 139-161).
 # Dr. Robert Hanner for recommendations about how to deal with BIN data.
-# Adapted lines 311, 314, 318, 321 and 330-332 from code shared in Stack 
+# Adapted lines 308, 311, 315, 318 and 327-329 from code shared in Stack 
 # Overflow discussions:
 # Author: https://stackoverflow.com/users/559784/arun.
 # https://stackoverflow.com/questions/32766325/fastest-way-of-determining-most-frequent-factor-in-a-grouped-data-frame-in-dplyr.
@@ -57,31 +57,28 @@ source("CountConflicts.R")
 # and specimen data. In addition, I am only selecting those columns needed for
 # downstream analysis.
 # Enter your taxon name between the double apostrophes "".
-dfRawSeqs <- bold_seqspec(taxon = "Gobiiformes", 
+dfRawSeqs <- bold_seqspec(taxon = "Salmonidae", 
                           geo = "all")[, c("recordID", "bin_uri", "order_name", 
                                            "family_name", "genus_name", 
                                            "species_name", "lat", "nucleotides", 
                                            "markercode")]
-# Convert to datatable. Datatables have useful features for data manipulation.
-dfRawSeqs <- setDT(dfRawSeqs)
 
 # Download outgroup species data from BOLD. These sequences may be used to root 
 # phylogenetic trees (depending if the taxa are an appropriate outgroup for
 # the organismal group under study).
 # Enter your taxon name between the double apostrophes "". Having multiple 
 # outgroups is more reliable.
-outgroups <- c("Salmonidae")
+outgroups <- c("Perca")
 dfOutgroup <- bold_seqspec(taxon = outgroups, 
                            geo = "all")[, c("recordID", "bin_uri", "order_name", 
                                             "family_name", "genus_name", 
                                             "species_name", "lat", 
                                             "nucleotides", "markercode")]
-dfOutgroup <- setDT(dfOutgroup)
 
-# Combine dfOutgroup and dfRawSeqs datatables so that they are in one useable 
-# datatable.
-l <- list(dfRawSeqs, dfOutgroup)
-dfFiltered <- rbindlist(l)
+# Combine dfOutgroup and dfRawSeqs so that they are in one useable dataframe.
+dfFiltered <- rbind(dfRawSeqs, dfOutgroup)
+# Convert to datatable. Datatables have useful features for data manipulation.
+dfFiltered <- setDT(dfFiltered)
 
 ### FILTER 1 ###
 # Filters are used for quality control purposes.
@@ -244,7 +241,7 @@ dfGenusConflicts <- dfGenusConflicts[grep("[A-Z]", genus_name)]
 # per BIN.
 dfGenusConflicts[, number_of_seqs := length(recordID), by = bin_uri]
 # Which bins have more than 10 sequences? These are probably more reliable.
-dfGenusConflicts <- dfGenusConflicts[which(number_of_seqs >= 10)]
+dfGenusConflicts <- dfGenusConflicts[number_of_seqs >= 10]
 # A count column is created to count the number of rows per genus per BIN.
 # This is necessary to calculate the percentage of sequences from each genus per
 # BIN.
@@ -262,7 +259,7 @@ dfGenusConflicts[order(-genus_percentage),
                  majority_genus_percentage := genus_percentage[1L], 
                  by = bin_uri]
 # Subset out those BINs that have a majority genera over 80%.
-dfAcceptedGenus <- dfGenusConflicts[which(majority_genus_percentage > 0.80)]
+dfAcceptedGenus <- dfGenusConflicts[majority_genus_percentage > 0.80]
 # Find the UNACCEPTED conflicted bins and remove them from dfResolve.
 # unacceptedBins = BINs in genusConflicts which were not accepted.
 unacceptedBins <- setdiff(genusConflicts, dfAcceptedGenus[, unique(bin_uri)])
@@ -276,7 +273,7 @@ speciesConflicts <- CountConflicts(dfResolve, "number_of_species")
 dfSpeciesConflicts <- dfResolve[bin_uri %in% speciesConflicts]
 dfSpeciesConflicts <- dfSpeciesConflicts[grep("[A-Z]", species_name)]
 dfSpeciesConflicts[, number_of_seqs := length(recordID), by = bin_uri]
-dfSpeciesConflicts <- dfSpeciesConflicts[which(number_of_seqs >= 10)]
+dfSpeciesConflicts <- dfSpeciesConflicts[number_of_seqs >= 10]
 dfSpeciesConflicts[, count := .N, by = .(bin_uri, species_name)]
 dfSpeciesConflicts[, species_percentage := .(count / number_of_seqs)]
 dfSpeciesConflicts[order(-count), majority_species := species_name[1L], 
@@ -287,7 +284,7 @@ dfSpeciesConflicts <- dfSpeciesConflicts[, .(bin_uri, species_name,
 dfSpeciesConflicts[order(-species_percentage), 
                    majority_species_percentage := species_percentage[1L], 
                    by = bin_uri]
-dfAcceptedSpecies <- dfSpeciesConflicts[which(majority_species_percentage > 0.80)]
+dfAcceptedSpecies <- dfSpeciesConflicts[majority_species_percentage > 0.80]
 # Find the UNACCEPTED conflicted bins and remove them from dfResolve.
 # unacceptedBins = BINs in genusConflicts which were not accepted.
 unacceptedBins <- setdiff(speciesConflicts, dfAcceptedSpecies[, unique(bin_uri)])

@@ -58,7 +58,7 @@ if (nrow(largeBins) > 0) {
   # Subset out the BINs with more than 1 sequence.
   dfCentroidSeqs <- dfPreCentroid[bin_uri %in% largeBins$bin_uri]
   # How many unique BINs are in dfCentroidSeqs? 
-  binNumberCentroid <- dfCentroidSeqs[, unique(bin_uri)]
+  binNumberCentroid <- unique(dfCentroidSeqs$bin_uri)
   binNumberCentroid <- length(binNumberCentroid)
   # We also have to create another separate dataframe with BINs that only have 
   # one member, called dfSingletons.
@@ -87,9 +87,7 @@ if (nrow(largeBins) > 0) {
   # Find the centroid sequence using the genetic distance matrix.
   # It is the sequence in a BIN with minimum average pairwise distance to all 
   # other sequences in the BIN.
-  centroidSeqs <- lapply(geneticDistanceCentroid, function(x) 
-    which.min(rowSums(x)))
-  centroidSeqs <- unlist(centroidSeqs)
+  centroidSeqs <- sapply(geneticDistanceCentroid, function(x) which.min(rowSums(x)))
   centroidSeqs <- names(centroidSeqs)
   centroidSeqs <- as.numeric(centroidSeqs)
   # Subset dfCentroidSeqs by the recordIDs of the centroid sequences.
@@ -105,7 +103,6 @@ if (nrow(largeBins) > 0) {
 # Make sure there is only a single row per record/BIN.
 dfCentroidSeqs <- dfCentroidSeqs[!duplicated(recordID)] 
 dfCentroidSeqs <- dfCentroidSeqs[!duplicated(bin_uri)]
-
 # If more than one BIN was assigned the same species name, take the BIN with 
 # the highest number of sequences. 
 dfCentroidSeqs <- dfCentroidSeqs[, .SD[which.max(filtered_bin_size)], 

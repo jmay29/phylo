@@ -6,8 +6,8 @@
 
 # Contributions & Acknowledgements #
 # Matt Orton (https://github.com/m-orton/R-Scripts) for contributions to the 
-# latitude trait section (lines 52-63).
-# Adapted lines 199-200 and 319-323 from code shared in Stack Overflow 
+# latitude trait section (lines 52-62).
+# Adapted lines 196-197 and 315-319 from code shared in Stack Overflow 
 # discussion:
 # Author: https://stackoverflow.com/users/403310/matt-dowle.
 # https://stackoverflow.com/questions/13273833/merging-multiple-data-table.
@@ -149,7 +149,7 @@ range(dfLongWild$longevity)
 # TRAIT: Maximum length.
 dfSpeciesTraits[, max_length := as.double(max_length)]
 # We only want total length measurements.
-dfMaxLength <- dfSpeciesTraits[which(type_length == "TL")]
+dfMaxLength <- dfSpeciesTraits[type_length == "TL"]
 # TEST 1: Does the trait have an adequate sample size?
 dfMaxLength <- setDT(GetTraitSpecificData(dfMaxLength, 3))
 nrow(dfMaxLength)
@@ -173,7 +173,7 @@ dfSalinity[, (integerVars) := lapply(.SD, function(x) as.numeric(revalue(as.char
 # Count number of water types by summing the rows.
 dfSalinity[, num_salinity_types := rowSums(.SD), .SDcols = integerVars]
 # Only keep species with one water type.
-dfSalinity <- dfSalinity[which(num_salinity_types == 1)]
+dfSalinity <- dfSalinity[num_salinity_types == 1]
 # Now let's combine them into one "Salinity" variable.
 dfSalinity <- as.data.frame(dfSalinity)
 dfSalinity$salinity <- colnames(dfSalinity[2:4])[max.col(dfSalinity[2:4])]

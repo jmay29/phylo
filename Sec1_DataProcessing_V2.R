@@ -8,7 +8,7 @@
 # Matt Orton (https://github.com/m-orton/R-Scripts) for design/testing/contributions 
 # to the sequence filters (lines 83-92, 139-161).
 # Dr. Robert Hanner for recommendations about how to deal with BIN data.
-# Adapted lines 308, 311, 315, 318 and 327-329 from code shared in Stack 
+# Adapted lines 309, 312, 316, 319 and 328-330 from code shared in Stack 
 # Overflow discussions:
 # Author: https://stackoverflow.com/users/559784/arun.
 # https://stackoverflow.com/questions/32766325/fastest-way-of-determining-most-frequent-factor-in-a-grouped-data-frame-in-dplyr.
@@ -57,7 +57,7 @@ source("CountConflicts.R")
 # and specimen data. In addition, I am only selecting those columns needed for
 # downstream analysis.
 # Enter your taxon name between the double apostrophes "".
-dfRawSeqs <- bold_seqspec(taxon = "Salmonidae", 
+dfRawSeqs <- bold_seqspec(taxon = "Gobiiformes", 
                           geo = "all")[, c("recordID", "bin_uri", "order_name", 
                                            "family_name", "genus_name", 
                                            "species_name", "lat", "nucleotides", 
@@ -174,7 +174,7 @@ dfFiltered <- dfFiltered[-seqLengthCheck, ]
 dfSpecies <- dfFiltered[grep("[A-Z]", species_name)]
 # Now we have the URIs of BINs that contain sequences with species 
 # information.
-speciesBins <- dfSpecies[, unique(bin_uri)]
+speciesBins <- unique(dfSpecies$bin_uri)
 # Subset out these BINs in dfFiltered.
 dfResolve <- dfFiltered[dfFiltered$bin_uri %in% speciesBins]
 
@@ -215,9 +215,10 @@ dfResolve[, number_of_families := length(unique(family_name[!is.na(family_name)]
           keyby = bin_uri]
 # Find number of BINs with family level conflicts.
 familyConflicts <- CountConflicts(dfResolve, "number_of_families")
-# Now use the ResolveBIN function to resolve BIN conflicts if desired.
-#dfResolve <- ResolveBIN(dfResolve, 338753, method = "recordID")
-#dfResolve <- ResolveBIN(dfResolve, "AAB2488", method = "bin_uri")
+# Now use the ResolveBIN function to resolve BIN conflicts if desired. Examples:
+#dfResolve <- ResolveBIN(dfResolve, 803396, method = "recordID")
+#dfResolve <- ResolveBIN(dfResolve, 803397, method = "recordID")
+#dfResolve <- ResolveBIN(dfResolve, "ADE3647", method = "bin_uri")
 
 # Genus level conflicts.
 # There are probably going to be a lot more genus and species level conflicts,
@@ -262,7 +263,7 @@ dfGenusConflicts[order(-genus_percentage),
 dfAcceptedGenus <- dfGenusConflicts[majority_genus_percentage > 0.80]
 # Find the UNACCEPTED conflicted bins and remove them from dfResolve.
 # unacceptedBins = BINs in genusConflicts which were not accepted.
-unacceptedBins <- setdiff(genusConflicts, dfAcceptedGenus[, unique(bin_uri)])
+unacceptedBins <- setdiff(genusConflicts, unique(dfAcceptedGenus$bin_uri))
 dfResolve <- dfResolve[!dfResolve$bin_uri %in% unacceptedBins]
 
 # # Species level conflicts.
@@ -287,7 +288,7 @@ dfSpeciesConflicts[order(-species_percentage),
 dfAcceptedSpecies <- dfSpeciesConflicts[majority_species_percentage > 0.80]
 # Find the UNACCEPTED conflicted bins and remove them from dfResolve.
 # unacceptedBins = BINs in genusConflicts which were not accepted.
-unacceptedBins <- setdiff(speciesConflicts, dfAcceptedSpecies[, unique(bin_uri)])
+unacceptedBins <- setdiff(speciesConflicts, unique(dfAcceptedSpecies$bin_uri))
 dfResolve <- dfResolve[!dfResolve$bin_uri %in% unacceptedBins]
 
 ################################################################################

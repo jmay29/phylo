@@ -5,7 +5,7 @@
 # Advisors: Dr. Sarah J. Adamowicz and Dr. Zeny Feng.
 
 # Contributions & Acknowledgements #
-# Centroid sequence selection (lines 49-101) designed by Matt Orton (https://github.com/m-orton/R-Scripts).
+# Centroid sequence selection (lines 52-101) designed by Matt Orton (https://github.com/m-orton/R-Scripts).
 # Adapted lines 108-109 from code shared in Stack Overflow discussion:
 # Author: https://stackoverflow.com/users/403310/matt-dowle.
 # https://stackoverflow.com/questions/10705290/select-a-value-for-based-on-a-highest-value-in-another-column.

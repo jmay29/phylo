@@ -5,7 +5,7 @@
 # Advisors: Dr. Sarah J. Adamowicz and Dr. Zeny Feng.
 
 # Contributions & Acknowledgements #
-# Adapted lines 106-110, 135-144, and 148-150 from code shared in Stack Overflow 
+# Adapted lines 104-108, 133-142, and 145-148 from code shared in Stack Overflow 
 # discussion:
 # Author: https://stackoverflow.com/users/1312519/by0.
 # https://stackoverflow.com/questions/12866189/calculating-the-outliers-in-r.

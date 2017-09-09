@@ -5,13 +5,14 @@
 RefSeqTrim <- function(data) {
   # data = Dataframe containing sequence information.
   
-  # Insert your reference sequence here!
-  dfRefSeqs <- data.frame(taxa = c("Salmoniformes"), nucleotides = c("CCTCTATTTAGTATTTGGTGCCTGAGCCGGGATAGTAGGCACCGCCCTGAGTCTACTGATTCGGGCNGAACTAAGCCAGCCGGGCGCTCTTCTGGGGGATGACCAAATCTATAACGTGATCGTCACAGCCCATGCCTTCGTTATGATTTTCTTTATAGTCATGCCAATTATAATCGGGGGCTTTGGAAACTGATTAATTCCCCTAATAATCGGAGCCCCTGATATGGCATTCCCTCGAATAAATAACATAAGCTTCTGACTCCTTCCTCCATCCTTTCTCCTCCTCCTGTCTTCATCAGGAGTTGAAGCCGGCGCGGGTACTGGATGAACAGTATACCCCCCTCTAGCCGGCAACCTCGCCCACGCAGGAGCCTCTGTTGATTTAACTATCTTCTCCCTTCATTTAGCTGGAATCTCCTCAATTTTAGGAGCCATTAATTTTATTACGACCATTATTAACATAAAACCTCCAGCCATCTCTCAGTACCAAACCCCCCTTTTCGTTTGAGCCGTGCTAGTTACTGCTGTCCTTCTATTACTTTCCCTCCCCGTCCTGGCAGCAGGCATTACTATGTTACTTACAGACCGAAATCTAAACACCACTTTCTTTGACCCGGCAGGCGGGGGAGATCCAATTTTATACCAACACCTC"))
+  # Insert your reference sequence here! Between the "".
+  dfRefSeqs <- data.frame(taxa = c(""), nucleotides = c(""))
   colnames(dfRefSeqs)[2] <- "nucleotides"
   # Convert to datatable for some data manipulation.
   dfRefSeqs <- setDT(dfRefSeqs)
   dfRefSeqs[, nucleotides := as.character(nucleotides)]
   # Symmetrical trimming of the references to a standard 620 bp.
+  # The user can alter this if desired.
   dfRefSeqs[, nucleotides := substr(nucleotides, 20, nchar(nucleotides) - 19)]
   # Check sequence length.
   dfRefSeqs[, seq_length := nchar(nucleotides)]

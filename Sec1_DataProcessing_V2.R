@@ -57,7 +57,7 @@ source("CountConflicts.R")
 # and specimen data. In addition, I am only selecting those columns needed for
 # downstream analysis.
 # Enter your taxon name between the double apostrophes "".
-dfRawSeqs <- bold_seqspec(taxon = "Gobiiformes", 
+dfRawSeqs <- bold_seqspec(taxon = "", 
                           geo = "all")[, c("recordID", "bin_uri", "order_name", 
                                            "family_name", "genus_name", 
                                            "species_name", "lat", "nucleotides", 
@@ -68,7 +68,7 @@ dfRawSeqs <- bold_seqspec(taxon = "Gobiiformes",
 # the organismal group under study).
 # Enter your taxon name between the double apostrophes "". Having multiple 
 # outgroups is more reliable.
-outgroups <- c("Perca")
+outgroups <- c("")
 dfOutgroup <- bold_seqspec(taxon = outgroups, 
                            geo = "all")[, c("recordID", "bin_uri", "order_name", 
                                             "family_name", "genus_name", 

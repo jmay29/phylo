@@ -285,7 +285,8 @@ dfCentroidSeqsNO <- RefSeqTrim(dfCentroidSeqsNO)
 # replaced.
 # Now re-run the alignment including outgroups (pick outgroup species that are
 # well represented and that serve as an appropriate outgroup to your taxa).
-goodOG <- which(dfCentroidSeqs$species_name == "Perca flavescens")
+# Enter your chosen outgroup species between the "".
+goodOG <- which(dfCentroidSeqs$species_name == "")
 mergeOG <- dfCentroidSeqs[goodOG, ]
 # Add them back.
 dfCentroidSeqsWithOG <- rbind(dfCentroidSeqsNO, mergeOG)

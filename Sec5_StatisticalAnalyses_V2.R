@@ -73,7 +73,7 @@ source("TestPhyloSig.R")
 # required for this section.
 
 # Read in your phylogenetic tree.
-mainTree <- read.tree(file = "RAxML_labelledTree.EPAGobTree")
+mainTree <- read.tree(file = "")
 # Fixing the tip labels.
 mainTree$tip.label <- gsub("_", " ", mainTree$tip.label)
 # Root the tree using your chosen outgroup species.

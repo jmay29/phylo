@@ -6,12 +6,9 @@
 
 # Contributions & Acknowledgements #
 # Matt Orton (https://github.com/m-orton/R-Scripts) for design/testing/contributions 
-# to the sequence filters (lines 83-92, 139-161).
+# to the sequence filters (lines 79-88, 132-153).
 # Dr. Robert Hanner for recommendations about how to deal with BIN data.
-# Adapted lines 309, 312, 316, 319 and 328-330 from code shared in Stack 
-# Overflow discussions:
-# Author: https://stackoverflow.com/users/559784/arun.
-# https://stackoverflow.com/questions/32766325/fastest-way-of-determining-most-frequent-factor-in-a-grouped-data-frame-in-dplyr.
+# Adapted lines 295-297 from code shared in Stack Overflow discussion:
 # Author: https://stackoverflow.com/users/403310/matt-dowle.
 # https://stackoverflow.com/questions/13273833/merging-multiple-data-table.
 
@@ -43,13 +40,12 @@ library(bold)
 # For data manipulation:
 #install.packages("data.table")
 library(data.table)
-#install.packages("dplyr")
-library(dplyr)
 #install.packages("foreach")
 library(foreach)
 # Load the function(s) designed for this script:
 source("ResolveBIN.R")
 source("CountConflicts.R")
+source("AssignLabel.R")
 
 ################################################################################
 
@@ -108,9 +104,7 @@ dfFiltered <- dfFiltered[markercode == "COI-5P"]
 dfFiltered[, nucleotides := as.character(nucleotides)]
 # Trim large portions of Ns and gaps at the start of a sequence. 
 # Find sequences that begin (^) with an N or a gap.
-startGapN <- sapply(regmatches(dfFiltered$nucleotides, 
-                               gregexpr("^[-N]", 
-                                        dfFiltered$nucleotides)), length)
+startGapN <- sapply(regmatches(dfFiltered$nucleotides, gregexpr("^[-N]", dfFiltered$nucleotides)), length)
 # Loop through all of the sequences.
 startGapN <- foreach(i = 1:nrow(dfFiltered)) %do%
   # If at least one sequence is found that begins with a gap or N (is flagged as a
@@ -125,8 +119,7 @@ startGapN <- foreach(i = 1:nrow(dfFiltered)) %do%
   }
 # Trim large portions of Ns and gaps at the end of a sequence. 
 # Find sequences that end ($) with an N or a gap.
-endGapN <- sapply(regmatches(dfFiltered$nucleotides, 
-                             gregexpr("[-N]$", dfFiltered$nucleotides)), length)
+endGapN <- sapply(regmatches(dfFiltered$nucleotides, gregexpr("[-N]$", dfFiltered$nucleotides)), length)
 endGapN <- foreach(i = 1:nrow(dfFiltered)) %do%
   if (endGapN[[i]] > 0) {
     # Using a regex to find sequences that end with gaps and/or Ns.
@@ -140,8 +133,7 @@ endGapN <- foreach(i = 1:nrow(dfFiltered)) %do%
 # Remove sequences with N/gap content above a certain threshold (1%).
 # Determine the number of positions where an *internal* N or gap is
 # found for each sequence.
-internalGapN <- sapply(regmatches(dfFiltered$nucleotides, 
-                                  gregexpr("[-N]", dfFiltered$nucleotides)), length)
+internalGapN <- sapply(regmatches(dfFiltered$nucleotides, gregexpr("[-N]", dfFiltered$nucleotides)), length)
 # Iterate over each sequence and see if the number of Ns or gaps is 
 # greater than 1% (0.01) of the total length of the sequence.
 internalGapN <- foreach(i = 1:nrow(dfFiltered)) %do% 
@@ -178,7 +170,7 @@ speciesBins <- unique(dfSpecies$bin_uri)
 # Subset out these BINs in dfFiltered.
 dfResolve <- dfFiltered[dfFiltered$bin_uri %in% speciesBins]
 
-# RESOLVING TAXONOMIC CONFLICTS.
+# RESOLVING TAXONOMIC CONFLICTS (MERGES).
 # These steps are performed to improve BIN reliability and ensure we are 
 # matching the appropriate sequence information to the appropriate trait data 
 # down the line.
@@ -189,36 +181,23 @@ dfResolve[dfResolve == ""] <- NA
 
 # Order level conflicts.
 # Find the number of orders in each BIN.
-dfResolve[, number_of_orders := length(unique(order_name[!is.na(order_name)])), 
-          keyby = bin_uri]
+dfResolve[, number_of_orders := length(unique(order_name[!is.na(order_name)])), keyby = bin_uri]
 # Which BINs have more than 1 order assigned to them?
 orderConflicts <- CountConflicts(dfResolve, "number_of_orders")
+
+# Family level conflicts.
+dfResolve[, number_of_families := length(unique(family_name[!is.na(family_name)])), keyby = bin_uri]
+familyConflicts <- CountConflicts(dfResolve, "number_of_families")
 # If there are more than 0 conflicts, you may apply the ResolveBIN function to
 # remove a deviant record from a BIN. You may want to do this if there
 # are a few weird records in your BIN, but the BIN seems reliable otherwise.
 # For example, line 212 would remove a specific record from the 
 # dataframe. Uncomment this line to use it and make sure to change the recordID:
-#dfResolve <- ResolveBIN(dfResolve, 210644, method = "recordID")
+#dfResolve <- ResolveBIN(dfResolve, 338753, method = "recordID")
 # Or you can remove an entire BIN from the dataset. You may want to do this if
 # there is no clear consensus in the BIN for an order level assignment.
 # For example, line 216 would remove an entire BIN from the dataframe.:
-#dfResolve <- ResolveBIN(dfResolve, "AAD2909", method = "bin_uri")
-# This would remove those records and BINs from the datatable so hopefully you 
-# won't have any more order level conflicts when you update the column:
-dfResolve[, number_of_orders := length(unique(order_name[!is.na(order_name)])), 
-          keyby = bin_uri]
-orderConflicts <- CountConflicts(dfResolve, "number_of_orders")
-
-# Family level conflicts.
-# Find the number of families in each BIN.
-dfResolve[, number_of_families := length(unique(family_name[!is.na(family_name)])), 
-          keyby = bin_uri]
-# Find number of BINs with family level conflicts.
-familyConflicts <- CountConflicts(dfResolve, "number_of_families")
-# Now use the ResolveBIN function to resolve BIN conflicts if desired. Examples:
-#dfResolve <- ResolveBIN(dfResolve, 803396, method = "recordID")
-#dfResolve <- ResolveBIN(dfResolve, 803397, method = "recordID")
-#dfResolve <- ResolveBIN(dfResolve, "ADE3647", method = "bin_uri")
+#dfResolve <- ResolveBIN(dfResolve, "AAB2488", method = "bin_uri")
 
 # Genus level conflicts.
 # There are probably going to be a lot more genus and species level conflicts,
@@ -227,10 +206,7 @@ familyConflicts <- CountConflicts(dfResolve, "number_of_families")
 # genus or species level assignment (i.e. at least 8 out of 10 records share the
 # same genus or species level assignment). You can change these thresholds if
 # you want to make them more or less strict.
-# Find the number of genera in each BIN.
-dfResolve[, number_of_genera := length(unique(genus_name[!is.na(genus_name)])), 
-          keyby = bin_uri]
-# Find number of BINs with genus level conflicts.
+dfResolve[, number_of_genera := length(unique(genus_name[!is.na(genus_name)])), keyby = bin_uri]
 genusConflicts <- CountConflicts(dfResolve, "number_of_genera")
 # Create a new datatable for BINs with genus level conflicts.
 dfGenusConflicts <- dfResolve[bin_uri %in% genusConflicts]
@@ -268,8 +244,7 @@ dfResolve <- dfResolve[!dfResolve$bin_uri %in% unacceptedBins]
 
 # # Species level conflicts.
 # Repeat the same process for species as we did for genera.
-dfResolve[, number_of_species := length(unique(species_name[!is.na(species_name)])), 
-          keyby = bin_uri]
+dfResolve[, number_of_species := length(unique(species_name[!is.na(species_name)])), keyby = bin_uri]
 speciesConflicts <- CountConflicts(dfResolve, "number_of_species")
 dfSpeciesConflicts <- dfResolve[bin_uri %in% speciesConflicts]
 dfSpeciesConflicts <- dfSpeciesConflicts[grep("[A-Z]", species_name)]
@@ -297,39 +272,39 @@ dfResolve <- dfResolve[!dfResolve$bin_uri %in% unacceptedBins]
 dfResolve[, filtered_bin_size := length(recordID), by = bin_uri]
 ################################################################################
 
-### TAXONOMIC LABELS ###
-# Now, we want to assign every sequence in a BIN a taxonomic label at the order,
-# family, genus, and species level. This will ensure that even those sequences 
+### SPECIES LABEL ###
+# Now, we want to assign every sequence in a BIN a taxonomic label at the 
+# species level. This will ensure that even those sequences 
 # with discordant taxonomic classifications will share a common name with the
 # "accepted" taxonomic assignment for their BIN.
-# First, create a new datatable containing only sequences baring taxonomic 
-# identification at the corresponding level.This is necessary because NA values 
+# First, create a new datatable containing only sequences bearing taxonomic 
+# identification at the species level. This is necessary because NA values 
 # are considered when counting the number of species.
-dfSpeciesLabel <- dfResolve[grep("[A-Z]", species_name)]
-dfSpeciesLabel <- dfSpeciesLabel[, .N, by = .(bin_uri, species_name)][order(-N), .(species_label = species_name[1L]), keyby = bin_uri]
+# Species label.
+dfSpeciesLabel <- AssignLabel(dfResolve, "species_name", "species_label")
 # Genus label.
-dfGenusLabel <- dfResolve[grep("[A-Z]", genus_name)]
-dfGenusLabel <- dfGenusLabel[, .N, by = .(bin_uri, genus_name)][order(-N), .(genus_label = genus_name[1L]), keyby = bin_uri]
-# Family label. Technically, there should be only one family/order name per BIN
-# after manually resolving these cases. But doing this step just in case!
-dfFamilyLabel <- dfResolve[grep("[A-Z]", family_name)]
-dfFamilyLabel <- dfFamilyLabel[, .N, by = .(bin_uri, family_name)][order(-N), .(family_label = family_name[1L]), keyby = bin_uri]
+dfGenusLabel <- AssignLabel(dfResolve, "genus_name", "genus_label")
+# Family label.
+dfFamilyLabel <- AssignLabel(dfResolve, "family_name", "family_label")
 # Order label.
-dfOrderLabel <- dfResolve[grep("[A-Z]", order_name)]
-dfOrderLabel <- dfOrderLabel[, .N, by = .(bin_uri, order_name)][order(-N), .(order_label = order_name[1L]), keyby = bin_uri]
+dfOrderLabel <- AssignLabel(dfResolve, "order_name", "order_label")
 
 # MERGING DATATABLES.
 # Merge datatables containing BIN species information.
-# Set the key for dfResolve.
-setkey(dfResolve, bin_uri)
-# Note: bin_uri is the key for each of these datatables already due to the use 
-# of "keyby" instead of just "by". This facilitates datatable merging.
-# Merging multiple datatables at once.
-dfFiltered <- Reduce(function(...) merge(...), list(dfResolve, dfSpeciesLabel, 
-                                                    dfGenusLabel, dfFamilyLabel, 
-                                                    dfOrderLabel))
-# Datatable reorganization.
-dfFiltered <- dfFiltered[, .(bin_uri, recordID, order_name, order_label, 
-                             family_name, family_label, genus_name, genus_label, 
-                             species_name, species_label, nucleotides, 
-                             initial_bin_size, filtered_bin_size, lat)]
+dfFiltered <- Reduce(function(...) merge(..., all = T), list(dfResolve, dfOrderLabel,
+                                                             dfFamilyLabel, dfGenusLabel,
+                                                             dfSpeciesLabel))
+# Datatable organization. Check this datatable to make sure it is accurate!
+dfFiltered <- dfFiltered[, .(bin_uri, recordID, order_name, order_label,
+                             family_name, family_label, genus_name, genus_label,
+                             species_name, species_label, 
+                             nucleotides, filtered_bin_size, lat)]
+
+# RESOLVING TAXONOMIC CONFLICTS (SPLITS).
+# Now we will select only a single BIN per species name to resolve "splits".
+# We only want the BIN names so we will filter dfFiltered to only one sequence 
+# for now.
+dfSplits <- dfFiltered[!duplicated(bin_uri)]
+dfSplits <- dfSplits[, .SD[which.max(filtered_bin_size)], keyby = species_label]
+# Now subset dfFiltered and remove the smaller SPLIT BINs.
+dfFiltered <- dfFiltered[dfFiltered$bin_uri %in% dfSplits$bin_uri]

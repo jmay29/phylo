@@ -1,7 +1,7 @@
-# Function: CountConflicts #
-# Purpose:  Counts how many BIN conflicts there for a given taxonomic level and 
-#           returns a vector of the BIN names.
 CountConflicts <- function(x, y) {
+  # Function: CountConflicts #
+  # Purpose:  Counts how many BIN conflicts there for a given taxonomic level and 
+  #           returns a vector of the BIN names.
   # x = Dataframe or datatable to apply function to.
   # y = Name of column of interest (the column that contains counts of order/
   #     family/genus/species per BIN).

@@ -1,7 +1,6 @@
-# Function: GetTraitSpecificData ##
-# Purpose: Filters a dataframe for presence of trait data. This function is 
-#          for the single variable analyses section.
 GetTraitSpecificData <- function(x, y) {
+  # Purpose: Filters a dataframe for presence of trait data. This function is 
+  #          for the single variable analyses section.
   # Filters a dataframe for only those data related to a specified trait.
   # x = Dataframe of species and trait information.
   # y = Trait (column) name of interest.

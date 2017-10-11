@@ -21,13 +21,13 @@ GetTraitSpecificDataBIN <- function(x, y) {
     # Reorganize datatable.
     # Column 1 = bin_uri, column 10 = species_label, 
     # column 13 = filtered_bin_size
-    z <- z[c(1, 10, 13, y)]
+    z <- z[c(1, 10, 12, y)]
     # Remove duplicate entries.
     z <- z[!duplicated(z$bin_uri), ] 
     # If all rows have data for column...
   } else {
     # If no entries need to be removed, just rename and reorganize x.
-    z <- x[c(1, 10, 13, y)]
+    z <- x[c(1, 10, 12, y)]
     # Remove duplicate entries.
     z <- z[!duplicated(z$bin_uri), ]  
   }

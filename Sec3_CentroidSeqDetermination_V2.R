@@ -5,13 +5,9 @@
 # Advisors: Dr. Sarah J. Adamowicz and Dr. Zeny Feng.
 
 # Contributions & Acknowledgements #
-# Centroid sequence selection (lines 52-101) designed by Matt Orton (https://github.com/m-orton/R-Scripts).
-# Adapted lines 108-109 from code shared in Stack Overflow discussion:
-# Author: https://stackoverflow.com/users/403310/matt-dowle.
-# https://stackoverflow.com/questions/10705290/select-a-value-for-based-on-a-highest-value-in-another-column.
+# Centroid sequence selection (lines 49-96) designed by Matt Orton (https://github.com/m-orton/R-Scripts).
 
 # This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 
@@ -58,10 +54,9 @@ if (nrow(largeBins) > 0) {
   # Subset out the BINs with more than 1 sequence.
   dfCentroidSeqs <- dfPreCentroid[bin_uri %in% largeBins$bin_uri]
   # How many unique BINs are in dfCentroidSeqs? 
-  binNumberCentroid <- unique(dfCentroidSeqs$bin_uri)
-  binNumberCentroid <- length(binNumberCentroid)
+  binNumberCentroid <- length(unique(dfCentroidSeqs$bin_uri))
   # We also have to create another separate dataframe with BINs that only have 
-  # one member, called dfSingletons.
+  # one sequence, called dfSingletons.
   dfSingletons <- dfPreCentroid[!bin_uri %in% largeBins$bin_uri]
   # We then take the dfCentroidSeqs sequences and group them by BIN.
   largeBinList <- lapply(unique(dfCentroidSeqs$bin_uri), 
@@ -76,8 +71,7 @@ if (nrow(largeBins) > 0) {
     names(DNAStringSet1[[i]]) <- largeBinRecordId[[i]]
   }
   # Align the sequences in each BIN using MUSCLE.
-  alignment1 <- lapply(DNAStringSet1, function(x) 
-   muscle::muscle(x, diags = TRUE, gapopen = -3000))
+  alignment1 <- lapply(DNAStringSet1, function(x) muscle::muscle(x, diags = TRUE, gapopen = -3000))
   # Convert each BIN alignment to DNAbin format.
   dnaBINCentroid <- lapply(alignment1, function(x) as.DNAbin(x))
   # Estimates the genetic distance between sequences in each BIN with the TN93 
@@ -99,16 +93,6 @@ if (nrow(largeBins) > 0) {
   # Centroid sequence selection not required if all BINs are singletons.
   dfCentroidSeqs <- dfPreCentroid
 }
-
-# Make sure there is only a single row per record/BIN.
-dfCentroidSeqs <- dfCentroidSeqs[!duplicated(recordID)] 
-dfCentroidSeqs <- dfCentroidSeqs[!duplicated(bin_uri)]
-# If more than one BIN was assigned the same species name, take the BIN with 
-# the highest number of sequences. 
-dfCentroidSeqs <- dfCentroidSeqs[, .SD[which.max(filtered_bin_size)], 
-                                 keyby = species_name]
-# Dealing with ties.
-dfCentroidSeqs <- dfCentroidSeqs[!duplicated(species_name)]
 
 ################################################################################
 # REFERENCE SEQUENCE TRIMMING #

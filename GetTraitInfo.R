@@ -14,6 +14,10 @@ GetTraitInfo <- function(x, y, type = c("continuous", "discrete")) {
     print(paste0("Number of observations: ", nrow(x)))
     # What is the range of the data?
     print(paste0("Range of data: ", range(x[, y])[1], " to ", range(x[, y])[2]))
+    # What is the mean?
+    print(paste0("Mean: ", mean(x[, y])))
+    # What is the median?
+    print(paste0("Median: ", median(x[, y])))
     # Plot of histogram.
     hist(x[, y], main = "", xlab = paste(y))
     paste("Histogram plotted!")

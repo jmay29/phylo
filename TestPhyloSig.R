@@ -1,7 +1,6 @@
-# Function: TestPhyloSig #
-# Purpose: Estimates phylogenetic signal of the trait given an input dataframe
-#          and phylogenetic tree.
 TestPhyloSig <- function(x, y, phylo, type = c("continuous", "discrete")){
+  # Purpose: Estimates phylogenetic signal of the trait given an input dataframe
+  #          and phylogenetic tree.
   # x = Dataframe to apply function to.
   # y = Trait of interest.
   # phylo = Tree of class phylo. This is needed to estimate phylogenetic signal.

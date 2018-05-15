@@ -1,12 +1,12 @@
-# Function: RefSeqTrim ##
-# Purpose: Trims nucleotide sequences in a dataframe according to a given
-#          reference sequence.
-# Acknowlegements: This function adapted from code provided by Matt Orton (https://github.com/m-orton/R-Scripts).
-RefSeqTrim <- function(data) {
-  # data = Dataframe containing sequence information.
+RefSeqTrim <- function(x) {
+  # Purpose: Trims nucleotide sequences in a dataframe according to a given
+  #          reference sequence.
+  # Acknowlegements: This function adapted from code provided by Matt Orton (https://github.com/m-orton/R-Scripts)
+  #                 - also licensed under GNU GPL v3.
+  # x = Dataframe containing sequence information.
   
   # Insert your reference sequence here! Between the "".
-  dfRefSeqs <- data.frame(taxa = c("Fish"), nucleotides = c("CCTCTATTTAGTATTTGGTGCCTGAGCCGGGATAGTAGGCACCGCCCTGAGTCTACTGATTCGGGCGGAACTAAGCCAGCCGGGCGCTCTTCTGGGGGATGACCAAATCTATAACGTGATCGTCACAGCCCATGCCTTCGTTATGATTTTCTTTATAGTCATGCCAATTATAATCGGGGGCTTTGGAAACTGATTAATTCCCCTAATAATCGGAGCCCCTGATATGGCATTCCCTCGAATAAATAACATAAGCTTCTGACTCCTTCCTCCATCCTTTCTCCTCCTCCTGTCTTCATCAGGAGTTGAAGCCGGCGCGGGTACTGGATGAACAGTATACCCCCCTCTAGCCGGCAACCTCGCCCACGCAGGAGCCTCTGTTGATTTAACTATCTTCTCCCTTCATTTAGCTGGAATCTCCTCAATTTTAGGAGCCATTAATTTTATTACGACCATTATTAACATAAAACCTCCAGCCATCTCTCAGTACCAAACCCCCCTTTTCGTTTGAGCCGTGCTAGTTACTGCTGTCCTTCTATTACTTTCCCTCCCCGTCCTGGCAGCAGGCATTACTATGTTACTTACAGACCGAAATCTAAACACCACTTTCTTTGACCCGGCAGGCGGGGGAGATCCAATTTTATACCAACACCT"))
+  dfRefSeqs <- data.frame(taxa = c("Fish"), nucleotides = c("CACCCTTTATCTAGTATTTGGTGCTTGAGCCGGAATAGTGGGCACTGCCCTAAGCCTGCTTATCCGAGCAGAACTAAGCCAGCCCGGCGCTCTCCTAGGAGACGACCAGATTTATAACGTAATTGTTACAGCACATGCCTTCGTAATAATTTTCTTTATAGTAATACCAATTATGATTGGGGGCTTTGGAAACTGACTAATTCCACTTATGATCGGTGCCCCTGACATAGCTTTCCCTCGAATAAATAATATGAGCTTTTGGCTCCTGCCTCCTTCTTTCCTTCTCCTCCTTGCTTCCTCAGGAGTTGAAGCCGGAGCTGGTACCGGATGAACTGTTTATCCCCCTCTTGCTGGGAACTTAGCACATGCTGGAGCATCTGTTGATTTAACCATTTTCTCTTTACACTTAGCAGGGGTTTCCTCAATTCTAGGTGCTATTAATTTTATTACAACCATCATTAATATAAAACCCCCTGCCATTTCCCAATATCAAACTCCCTTGTTCGTATGGGCTGTATTAATTACCGCCGTTCTTCTCCTTCTTTCACTACCTGTTCTTGCCGCTGGCATTACAATGCTTCTTACAGACCGAAATTTGAACACCACTTTCTTCGATCCTGCAGGAGGGGGTGATCCCATCCTTTACCAACACTTATTC"))
   colnames(dfRefSeqs)[2] <- "nucleotides"
   # Convert to datatable for some data manipulation.
   dfRefSeqs <- setDT(dfRefSeqs)
@@ -17,9 +17,9 @@ RefSeqTrim <- function(data) {
   # Check sequence length.
   dfRefSeqs[, seq_length := nchar(nucleotides)]
   # We must ensure that the sequences are of the chr type.
-  alignmentSeqs <- as.character(data$nucleotides)
+  alignmentSeqs <- as.character(x$nucleotides)
   # Name our sequences according to species names.
-  names(alignmentSeqs) <- data$species_name
+  names(alignmentSeqs) <- x$species_name
   alignmentRef <- as.character(dfRefSeqs$nucleotides[1])
   # Name our reference sequence "REFERENCE".
   names(alignmentRef) <- "REFERENCE"
@@ -66,10 +66,10 @@ RefSeqTrim <- function(data) {
   # Reorder dfAllSeqs according to the order of the alignment.
   alignmentOrder <- DNAStringSet3@ranges@NAMES
   # Order dfAllSeqs according to this.
-  data <- data[match(alignmentOrder, data$species_name), ]
+  x <- x[match(alignmentOrder, x$species_name), ]
   # Replace the old sequences with the new sequences.
   trimmedSeqs <- as.character(DNAStringSet3)
-  data$nucleotides <- trimmedSeqs
+  x$nucleotides <- trimmedSeqs
   # Return a dataframe with the newly trimmed sequences.
-  return(data)
+  return(x)
 }

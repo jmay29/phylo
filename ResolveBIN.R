@@ -1,7 +1,6 @@
-# Function: ResolveBIN #
-# Purpose:  Resolves BINs with taxonomic conflicts by either removing records or
-#           the BIN itself from a dataframe.
 ResolveBIN <- function(x, y, method = c("bin_uri","recordID")){
+  # Purpose:  Resolves BINs with taxonomic conflicts by either removing records or
+  #           the BIN itself from a dataframe.
   # x = Dataframe to apply function to.
   # y = Either the BIN or recordID to be removed.
   # method = Specify whether the item to be removed is a BIN or a recordID.

@@ -6,11 +6,11 @@
 # Matthew Orton (https://github.com/m-orton/R-Scripts) for testing/contributions to the sequence filters.
 # Dr. Robert Hanner for recommendations about how to deal with BIN data.
 
-# This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+# This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License 
+# as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
 
-# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty 
+# of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
 
 # There is a copy of the GNU General Public License along with this program in the repository where it is located. 
 # Or view it directly here at http://www.gnu.org/licenses/
@@ -42,14 +42,19 @@ source("AssignLabel.R")
 # Download sequences from BOLD using the function bold_seqspec() for sequence and specimen data. 
 # In addition, I am only selecting those columns needed for downstream analysis.
 # Enter your taxon between the "".
-dfRawSeqs <- bold_seqspec(taxon = "Scorpaeniformes", geo = "all")[, c("recordID", "bin_uri", "order_name", "family_name", "genus_name", "species_name", "lat", "nucleotides", "markercode")]
+dfRawSeqs <- bold_seqspec(taxon = "Scorpaeniformes", geo = "all")[, c("recordID", "bin_uri", "order_name", "family_name", 
+                                                                      "genus_name", "species_name", "lat", "nucleotides", 
+                                                                      "markercode")]
 
-# Download outgroup species data from BOLD. These sequences may be used to root phylogenetic trees (depending if the taxa are an appropriate outgroup for
-# the organismal group under study).
+# Download outgroup species data from BOLD. These sequences may be used to root phylogenetic trees (depending if the taxa 
+# are an appropriate outgroup for the organismal group under study).
 # Enter your outgroup name between the "".
 outgroups <- c("Neoceratodus forsteri") 
-dfOutgroup <- bold_seqspec(taxon = outgroups, geo = "all")[, c("recordID", "bin_uri", "order_name", "family_name", "genus_name", "species_name", "lat", "nucleotides", "markercode")]
-# Combine dfOutgroup and dfRawSeqs so that they are in one useable dataframe. Also, convert to datatable as datatables have useful features for data manipulation.
+dfOutgroup <- bold_seqspec(taxon = outgroups, geo = "all")[, c("recordID", "bin_uri", "order_name", "family_name", 
+                                                               "genus_name", "species_name", "lat", "nucleotides", 
+                                                               "markercode")]
+# Combine dfOutgroup and dfRawSeqs so that they are in one useable dataframe. Also, convert to datatable as datatables 
+# have useful features for data manipulation.
 dfFiltered <- as.data.table(rbind(dfRawSeqs, dfOutgroup))
 
 ### FILTER 1 ###
@@ -74,8 +79,8 @@ dfFiltered <- dfFiltered[markercode == "COI-5P"]
 ### FILTER 4 ###
 # Trim sequences with high N and gap content at their terminal ends.
 # Find sequences that begin (^) with an N or a gap and split them using tstrsplit. Take only the second half of the split.
-# strsplit gives a blank first element here when splitting at the beginning of the string, so that is why the chained command
-# is neccessary.
+# strsplit gives a blank first element here when splitting at the beginning of the string, so that is why the chained 
+# command is neccessary.
 dfFiltered[, c("split1", "split2") := tstrsplit(nucleotides, "^[-N]+")][, nucleotides := ifelse(split1 == "", split2, nucleotides)]
 # Remove extra columns.
 dfFiltered[, c("split1","split2") := NULL]
@@ -100,8 +105,8 @@ dfFiltered <- dfFiltered[nchar(gsub("-", "", nucleotides)) %between% c(640, 1000
 # Here, we are obtaining information on a per BIN basis to facilitate trait matching later on.
 
 ### FILTER 7 ###
-# Remove rows with no species information. This will remove BINs without any species information. BINs without species data would 
-# not match with any trait information down the line.
+# Remove rows with no species information. This will remove BINs without any species information. BINs without species data 
+# would not match with any trait information down the line.
 # Create a new datatable containing only sequences baring species-level identification. This is so we can extract the 
 # BIN URIs that contain species-level identification and remove BIN URIs without species information. 
 dfSpecies <- dfFiltered[species_name %like% "[A-Z]"]
@@ -112,7 +117,8 @@ dfResolve <- dfFiltered[bin_uri %in% dfSpecies$bin_uri]
 # These steps are performed to improve BIN reliability and ensure we are matching the appropriate sequence information to the 
 # appropriate trait data down the line.
 
-# First, I need to replace all blanks with NA values in the taxonomy columns. This is to ensure that empty cells are not counted as taxa.
+# First, I need to replace all blanks with NA values in the taxonomy columns. This is to ensure that empty cells are not 
+# counted as taxa.
 dfResolve[dfResolve == ""] <- NA
 
 # Order level conflicts.
@@ -138,9 +144,9 @@ familyConflicts
 
 # Genus level conflicts.
 # There are probably going to be a lot more genus and species level conflicts, so we will not be able to check them manually. 
-# Instead, we will keep only those BINs that have AT LEAST 10 records and that have 80% consistency for genus or species level assignment 
-# (i.e. at least 8 out of 10 records share the same genus or species level assignment). You can change these thresholds if
-# you want to make them more or less strict.
+# Instead, we will keep only those BINs that have AT LEAST 10 records and that have 80% consistency for genus or species 
+# level assignment (i.e. at least 8 out of 10 records share the same genus or species level assignment). You can change these 
+# thresholds if you want to make them more or less strict.
 dfResolve[, number_of_genera := length(unique(genus_name[!is.na(genus_name)])), keyby = bin_uri]
 genusConflicts <- CountConflicts(dfResolve, "number_of_genera")
 # Create a new datatable for BINs with genus level conflicts.
@@ -148,18 +154,22 @@ dfGenusConflicts <- dfResolve[bin_uri %in% genusConflicts]
 # Now we must determine the most common genus and if it has at least 80% consistency in sequences that DO have genus level information.
 # Only looking at records with genus classifications.
 dfGenusConflicts <- dfGenusConflicts[genus_name %like% "[A-Z]"]
-# Create a new column for the number of sequences with genus level information per BIN and only take BINs with more than 10 sequences (they are probably more reliable).
+# Create a new column for the number of sequences with genus level information per BIN and only take BINs with more than 
+# 10 sequences (they are probably more reliable).
 dfGenusConflicts <- dfGenusConflicts[, number_of_seqs := length(recordID), by = bin_uri][number_of_seqs >= 10]
-# A count column is created to count the number of sequences per genus per BIN. This is necessary to calculate the percentage of sequences from each genus per BIN.
+# A count column is created to count the number of sequences per genus per BIN. This is necessary to calculate the 
+# percentage of sequences from each genus per BIN.
 dfGenusConflicts[, count := .N, by = .(bin_uri, genus_name)]
 # Calculate the percentage of sequences from each genus per BIN.
 dfGenusConflicts[, genus_percentage := .(count / number_of_seqs)]
 # The majority genus is the one with the largest percentage (in descending order i.e. -count).
 dfGenusConflicts[order(-count), majority_genus := genus_name[1L], by = bin_uri]
-# Make a column for majority species percentage to test if it is over 80%. This is the percentage for the genus with the majority of entries.
+# Make a column for majority species percentage to test if it is over 80%. This is the percentage for the genus with the 
+# majority of entries.
 dfGenusConflicts[order(-genus_percentage), majority_genus_percentage := genus_percentage[1L], by = bin_uri]
 # Reorganize to double check.
-dfGenusConflicts <- dfGenusConflicts[, .(bin_uri, genus_name, majority_genus, number_of_seqs, count, genus_percentage, majority_genus_percentage)]
+dfGenusConflicts <- dfGenusConflicts[, .(bin_uri, genus_name, majority_genus, number_of_seqs, count, 
+                                         genus_percentage, majority_genus_percentage)]
 # Subset out those BINs that have a majority genera over 80%.
 dfAcceptedGenus <- dfGenusConflicts[majority_genus_percentage > 0.80]
 # Find the UNACCEPTED conflicted bins and remove them from dfResolve.
@@ -178,7 +188,8 @@ dfSpeciesConflicts[, count := .N, by = .(bin_uri, species_name)]
 dfSpeciesConflicts[, species_percentage := .(count / number_of_seqs)]
 dfSpeciesConflicts[order(-count), majority_species := species_name[1L], by = bin_uri]
 dfSpeciesConflicts[order(-species_percentage), majority_species_percentage := species_percentage[1L], by = bin_uri]
-dfSpeciesConflicts <- dfSpeciesConflicts[, .(bin_uri, species_name, majority_species, number_of_seqs, count, species_percentage, majority_species_percentage)]
+dfSpeciesConflicts <- dfSpeciesConflicts[, .(bin_uri, species_name, majority_species, number_of_seqs, count, 
+                                             species_percentage, majority_species_percentage)]
 dfAcceptedSpecies <- dfSpeciesConflicts[majority_species_percentage > 0.80]
 unacceptedBins <- setdiff(speciesConflicts, unique(dfAcceptedSpecies$bin_uri))
 dfResolve <- dfResolve[!dfResolve$bin_uri %in% unacceptedBins]
@@ -193,8 +204,8 @@ dfResolve[, filtered_bin_size := length(recordID), by = bin_uri]
 # Now, we want to assign every sequence in a BIN taxonomic labels. This will ensure that even those sequences 
 # with discordant taxonomic classifications will share a common name with the "accepted" taxonomic assignment for their BIN. 
 # This is necessary for matching trait information using species names.
-# First, create a new datatable containing only sequences bearing taxonomic identification at the species level. This is necessary because 
-# NA values are considered when counting the number of species.
+# First, create a new datatable containing only sequences bearing taxonomic identification at the species level. 
+# This is necessary because NA values are considered when counting the number of species.
 # Species label.
 dfSpeciesLabel <- AssignLabel(dfResolve, "species_name", "species_label")
 # Genus label.

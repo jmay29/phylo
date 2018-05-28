@@ -15,7 +15,7 @@
 # There is a copy of the GNU General Public License along with this program in the repository where it is located. 
 # Or view it directly here at http://www.gnu.org/licenses/
 
-##################################################################################################################
+#############################################################################################################################
 
 ##### SECTION 1: DATA PROCESSING #####
 # This section is primarily for quality control purposes of DNA barcode data obtained from the BOLD API. 
@@ -37,7 +37,7 @@ source("ResolveBIN.R")
 source("CountConflicts.R")
 source("AssignLabel.R")
 
-##################################################################################################################
+#############################################################################################################################
 
 # Download sequences from BOLD using the function bold_seqspec() for sequence and specimen data. 
 # In addition, I am only selecting those columns needed for downstream analysis.
@@ -175,7 +175,7 @@ dfAcceptedGenus <- dfGenusConflicts[majority_genus_percentage > 0.80]
 # Find the UNACCEPTED conflicted bins and remove them from dfResolve.
 # unacceptedBins = BINs in genusConflicts which were not accepted.
 unacceptedBins <- setdiff(genusConflicts, unique(dfAcceptedGenus$bin_uri))
-dfResolve <- dfResolve[!dfResolve$bin_uri %in% unacceptedBins]
+dfResolve <- dfResolve[!bin_uri %in% unacceptedBins]
 
 # # Species level conflicts.
 # Repeat the same process for species as we did for genera.
@@ -192,13 +192,11 @@ dfSpeciesConflicts <- dfSpeciesConflicts[, .(bin_uri, species_name, majority_spe
                                              species_percentage, majority_species_percentage)]
 dfAcceptedSpecies <- dfSpeciesConflicts[majority_species_percentage > 0.80]
 unacceptedBins <- setdiff(speciesConflicts, unique(dfAcceptedSpecies$bin_uri))
-dfResolve <- dfResolve[!dfResolve$bin_uri %in% unacceptedBins]
+dfResolve <- dfResolve[!bin_uri %in% unacceptedBins]
 
-##################################################################################################################
-### TRAIT: POST FILTER BIN SIZE ###
+### POST FILTER BIN SIZE ###
 # Determine how many sequences are in a BIN in total after sequence filtering.
 dfResolve[, filtered_bin_size := length(recordID), by = bin_uri]
-##################################################################################################################
 
 ### SPECIES LABEL ###
 # Now, we want to assign every sequence in a BIN taxonomic labels. This will ensure that even those sequences 

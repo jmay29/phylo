@@ -1,35 +1,36 @@
-GetTraitInfo <- function(x, y, type = c("continuous", "discrete")) {
+GetTraitInfo <- function(x) {
   # Purpose: Provides descriptive information for data of a certain trait.
-  # x = Dataframe of species and trait information.
-  # y = Trait (column) name of interest.
-  # type = Class of trait.
+  # x = Vector containing trait of interest.
+
+  # Get name of trait.
+  traitName <- substitute(x)
+  print(traitName)
   
-  type <- match.arg(type)
+  # Get class of trait.
+  traitType <- class(x)
   
   # If the trait is continuous...
-  if(type == "continuous") {
-    # Convert to dataframe.
-    x <- as.data.frame(x)
+  if(traitType == "numeric") {
+
     # How many rows are there?
-    print(paste0("Number of observations: ", nrow(x)))
+    print(paste0("Number of observations: ", sum(!is.na(x))))
     # What is the range of the data?
-    print(paste0("Range of data: ", range(x[, y])[1], " to ", range(x[, y])[2]))
+    print(paste0("Range of data: ", range(x, na.rm = T)[1], " to ", range(x, na.rm = T)[2]))
     # What is the mean?
-    print(paste0("Mean: ", mean(x[, y])))
+    print(paste0("Mean: ", mean(x, na.rm = T)))
     # What is the median?
-    print(paste0("Median: ", median(x[, y])))
+    print(paste0("Median: ", median(x, na.rm = T)))
     # Plot of histogram.
-    hist(x[, y], main = "", xlab = paste(y))
+    hist(x, main = "", xlab = paste(x))
     paste("Histogram plotted!")
     
     # If the trait is discrete (categorical)...
-  } else if(type == "discrete") {
-    # Convert to dataframe.
-    x <- as.data.frame(x)
+  } else if(traitType == "character" | traitType == "factor" | traitType == "integer") {
+  
     # How many rows are there?
-    print(paste0("Number of observations: ", nrow(x)))
+    print(paste0("Number of observations: ", sum(!is.na(x))))
     # Table of trait information:
     print("Number of observations per category: ")
-    table(x[, y])
+    table(x)
   }
 }

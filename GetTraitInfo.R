@@ -1,17 +1,15 @@
 GetTraitInfo <- function(x) {
   # Purpose: Provides descriptive information for data of a certain trait.
   # x = Vector containing trait of interest.
-
-  # Get name of trait.
-  traitName <- substitute(x)
-  print(traitName)
+  # n = String containing name of trait.
   
-  # Get class of trait.
+  # Get class and name of trait.
   traitType <- class(x)
+  print(deparse(substitute(x)))
   
   # If the trait is continuous...
   if(traitType == "numeric") {
-
+  
     # How many rows are there?
     print(paste0("Number of observations: ", sum(!is.na(x))))
     # What is the range of the data?
@@ -31,6 +29,6 @@ GetTraitInfo <- function(x) {
     print(paste0("Number of observations: ", sum(!is.na(x))))
     # Table of trait information:
     print("Number of observations per category: ")
-    table(x)
+    print(table(x))
   }
 }

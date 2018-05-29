@@ -16,16 +16,16 @@ GetTraitSpecificDataBIN <- function(x, y) {
     z <- x[-noY, ]
     # Reorganize dataframe.
     # Column 1 = bin_uri, column 10 = species_label
-    z <- z[c(1, 10, y)]
+    z <- z[c(10, y)]
     # Remove duplicate entries per BIN.
-    z <- z[!duplicated(z$bin_uri), ] 
+    z <- z[!duplicated(z$species_label), ] 
     
     # If all rows have data for column...
   } else {
     # If no entries need to be removed, just rename and reorganize x.
-    z <- x[c(1, 10, y)]
+    z <- x[c(10, y)]
     # Remove duplicate entries.
-    z <- z[!duplicated(z$bin_uri), ]  
+    z <- z[!duplicated(z$species_label), ]  
   }
   
   rm(noY)

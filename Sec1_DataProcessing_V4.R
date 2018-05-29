@@ -81,7 +81,7 @@ dfFiltered <- dfFiltered[markercode == "COI-5P"]
 # Find sequences that begin (^) with an N or a gap and split them using tstrsplit. Take only the second half of the split.
 # strsplit gives a blank first element here when splitting at the beginning of the string, so that is why the chained 
 # command is neccessary.
-dfFiltered[, c("split1", "split2") := tstrsplit(nucleotides, "^[-N]+")][, nucleotides := ifelse(split1 == "", split2, nucleotides)]
+dfFiltered[, c("split1", "split2") := tstrsplit(nucleotides, "^[-N]+")][split1 == "", nucleotides := split2]
 # Remove extra columns.
 dfFiltered[, c("split1","split2") := NULL]
 # Trim large portions of Ns and gaps at the end of a sequence. 

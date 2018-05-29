@@ -5,7 +5,7 @@ CountConflicts <- function(x, y) {
   # y = Name of column of interest (the column that contains counts of order/
   #     family/genus/species per BIN).
 
-  # Which BINs have a value greater than 1/
+  # Which BINs have a value greater than 1?
   conflicts <- which(x[, get(y)] > 1)
   # Subset these BINs.
   conflicts <- x[conflicts, ]

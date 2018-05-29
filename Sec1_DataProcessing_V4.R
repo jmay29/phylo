@@ -28,8 +28,6 @@ library(bold)
 # For data manipulation:
 #install.packages("data.table")
 library(data.table)
-#install.packages("foreach")
-library(foreach)
 #install.packages(stringr)
 library(stringr)
 # Load the function(s) designed for this script:
@@ -42,7 +40,7 @@ source("AssignLabel.R")
 # Download sequences from BOLD using the function bold_seqspec() for sequence and specimen data. 
 # In addition, I am only selecting those columns needed for downstream analysis.
 # Enter your taxon between the "".
-dfRawSeqs <- bold_seqspec(taxon = "Scorpaeniformes", geo = "all")[, c("recordID", "bin_uri", "order_name", "family_name", 
+dfRawSeqs <- bold_seqspec(taxon = "Cyclopteridae", geo = "all")[, c("recordID", "bin_uri", "order_name", "family_name", 
                                                                       "genus_name", "species_name", "lat", "nucleotides", 
                                                                       "markercode")]
 
@@ -117,8 +115,7 @@ dfResolve <- dfFiltered[bin_uri %in% dfSpecies$bin_uri]
 # These steps are performed to improve BIN reliability and ensure we are matching the appropriate sequence information to the 
 # appropriate trait data down the line.
 
-# First, I need to replace all blanks with NA values in the taxonomy columns. This is to ensure that empty cells are not 
-# counted as taxa.
+# First, replace all blanks with NA values in the taxonomy columns. This is to ensure that empty cells are not counted as taxa.
 dfResolve[dfResolve == ""] <- NA
 
 # Order level conflicts.
@@ -227,3 +224,8 @@ dfSplits <- dfFiltered[!duplicated(bin_uri)]
 dfSplits <- dfSplits[, .SD[which.max(filtered_bin_size)], keyby = species_label]
 # Now subset dfFiltered and remove the smaller SPLIT BINs.
 dfFiltered <- dfFiltered[bin_uri %in% dfSplits$bin_uri]
+
+# Remove objects that are not needed for Section 2.
+rm(orderConflicts, familyConflicts, genusConflicts, speciesConflicts, unacceptedBins)
+rm(dfSpecies, dfGenusConflicts, dfSpeciesConflicts, dfAcceptedGenus, dfAcceptedSpecies, dfSplits)
+rm(dfOrderLabel, dfFamilyLabel, dfGenusLabel, dfSpeciesLabel)

@@ -49,10 +49,12 @@ dfLatitude[, median_lat := median(abs_lat), keyby = bin_uri]
 dfLatitude <- as.data.table(GetTraitSpecificDataBIN(dfLatitude, 15))
 # Dataframe reorganization and renaming.
 setnames(dfLatitude, "species_label", "species_name")
+
 # In this pipeline, we will eventually be constructing a multivariable datatable once we have also downloaded the FishBase data.
 # While considering traits for eventual multivariable analyses, it is necessary for them to have a decent sample size 
 # (i.e. > nrows of data, depending on your purposes). In addition, they should exhibit some amount of variation 
 # across the observations (all of the observations shouldn't be in one category)!
+
 # The GetTraitInfo function can be used to obtain some information about the trait. 
 # Are there a decent number of observations for this trait? Is there variation in the trait?
 GetTraitInfo(dfLatitude$median_lat)
@@ -69,7 +71,7 @@ dfFishBase <- as.data.table(fishbase)
 dfFishBase[, species_name := paste(Genus, Species)]
 # We only want the species name column.
 dfFishBase <- dfFishBase[, .(species_name)]
-# Match the species labels from BOLD with the species names from FishBase.
+# Match the species labels from BOLD with the species names from FishBase. These are the species with records available on both BOLD and FishBase.
 dfBoldBase <- merge(dfFiltered, dfFishBase, by = "species_name")
 # Extract species' name as a vector if trying to access trait information for first time (aka if you haven't saved trait info in 
 # your current working directory (CWD) yet).
@@ -92,12 +94,9 @@ dfSpeciesTraits <- dfSpecies[, .(species_name = sciname, body_shape = BodyShapeI
                                  female_max_length = LengthFemale, female_type_length = LTypeMaxF, freshwater = Fresh, 
                                  saltwater = Saltwater, brackish = Brack)]
 
-# We need to recode some of the trait data.
-# First, let's convert the categorical traits into factors.
-factorTraits <- c("body_shape", "freshwater", "saltwater", "brackish")
-dfSpeciesTraits[, (factorTraits) := lapply(.SD, function(x) as.factor(x)), .SDcols = factorTraits]
-
 # TRAIT: Body shape.
+# Convert body_shape to factor type (the type that categorical traits should be coded for regression analysis).
+dfSpeciesTraits[, body_shape := as.factor(body_shape)]
 # Get information about the trait body_shape.
 GetTraitInfo(dfSpeciesTraits$body_shape)
 # To remove rare categories, uncomment the following line (e.g. "eel-like" could be a rare category that you want to remove).
@@ -107,8 +106,7 @@ GetTraitInfo(dfSpeciesTraits$body_shape)
 # For the length data, we have both male and female data (male_max_length and female_max_length). 
 # First, let's remove observations that are not "TL" or total length under male_type_length and female_type_length, to keep things consistent.
 dfSpeciesTraits[male_type_length != "TL", male_max_length := NA][female_type_length != "TL", female_max_length := NA]
-# Since we are dealing with mitochondrial DNA, let's take the female data when it is available, otherwise
-# take the male observation for the species.
+# Since we are dealing with mitochondrial DNA, let's take the female data when it is available, otherwise take the male observation for the species.
 dfSpeciesTraits[, max_length := ifelse(is.na(female_max_length), male_max_length, female_max_length)]
 # Remove the extra length columns.
 dfSpeciesTraits[, c("male_type_length","female_type_length", "male_max_length", "female_max_length") := NULL]
@@ -123,8 +121,8 @@ dfSpeciesTraits[, (salinities) := lapply(.SD, function(x) as.numeric(revalue(as.
 # I want to only look at purely saltwater, brackish, or freshwater species. So, remove species that inhabit more than 1 water type.
 # Count number of water types by summing the rows.
 dfSpeciesTraits[, num_salinity_types := rowSums(.SD), .SDcols = salinities]
-# For those species that inhabit only one water type, select the column that was assigned a "1".
-dfSpeciesTraits[num_salinity_types == 1, salinity := colnames(.SD)[max.col(.SD)], .SDcols = salinities]
+# For those species that inhabit only one water type, select the column name that was assigned a "1" to represent that species.
+dfSpeciesTraits[num_salinity_types == 1, salinity := as.factor(colnames(.SD)[max.col(.SD)]), .SDcols = salinities]
 # Remove the extra salinity columns.
 dfSpeciesTraits[, c("freshwater","saltwater", "brackish", "num_salinity_types") := NULL]
 # Get information about the trait.
@@ -137,9 +135,7 @@ write.csv(dfEcology, file = "ecology_info.csv")
 dfEcology <- fread("ecology_info.csv")
 # Note: There is only one row per species in dfEcology.
 dfEcologyTraits <- dfEcology[, .(species_name = sciname, lakes = Lakes, oceanic = Oceanic, benthic = Benthic, diet_troph = DietTroph)]
-# As only some of the variables are coded as integers right now, we need to recode them to the types needed for regression analysis (i.e. factor type).
-# For salinity, we manually put the names in of the columns for the salinities variable. Now, let's figure out which columns are of 
-# the integer type from the dfEcologyTraits since they aren't all integers!
+# As only some of the variables are coded as integers right now, we need to recode them factor types.
 integerVars <- dfEcologyTraits[, lapply(.SD, is.integer)]
 integerVars <- which(integerVars == "TRUE")
 # Change all of the integer columns to factor type.
@@ -182,7 +178,6 @@ GetTraitInfo(dfReproTraits$parental_care)
 # Construction of dfTraits datatable.
 # This table contains all the potential traits for multivariable analysis.
 # Let's first merge the trait information back to dfFiltered.
-# NA for those species that don't have info for that particular trait.
 # Note: I only want a single row per species from dfFiltered for this merging process (i.e. I just want the bin name, species name, and size of the bin). 
 dfFilteredSingle <- dfFiltered[!duplicated(species_name)][, .(bin_uri, species_name, filtered_bin_size)]
 # Merge dfTraits with all of the FishBase data.
@@ -198,3 +193,8 @@ dfTraits <- dfTraits[!missing]
 dfPreCentroid <- merge(dfFiltered, dfTraits, by = "species_name")[, 1:8]
 # Dataframe reorganization and renaming.
 setnames(dfPreCentroid, old = c('bin_uri.x', 'filtered_bin_size.x'), new = c('bin_uri', 'filtered_bin_size'))
+
+# Remove objects that are not needed for Section 3.
+rm(speciesNames, salinities, integerVars, missing)
+rm(dfBoldBase, dfFishBase, dfFilteredSingle)
+rm(dfLatitude, dfSpecies, dfSpeciesTraits, dfEcology, dfEcologyTraits, dfReproduction, dfReproTraits)

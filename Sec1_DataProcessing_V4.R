@@ -227,5 +227,4 @@ dfFiltered <- dfFiltered[bin_uri %in% dfSplits$bin_uri]
 
 # Remove objects that are not needed for Section 2.
 rm(orderConflicts, familyConflicts, genusConflicts, speciesConflicts, unacceptedBins)
-rm(dfSpecies, dfGenusConflicts, dfSpeciesConflicts, dfAcceptedGenus, dfAcceptedSpecies, dfSplits)
-rm(dfOrderLabel, dfFamilyLabel, dfGenusLabel, dfSpeciesLabel)
+rm(dfSpecies, dfGenusConflicts, dfSpeciesConflicts, dfAcceptedGenus, dfAcceptedSpecies, dfSplits); rm(dfOrderLabel, dfFamilyLabel, dfGenusLabel, dfSpeciesLabel)

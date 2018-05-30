@@ -3,7 +3,7 @@
 
 # Contributions & Acknowledgements #
 # Dr. Sarah J. Adamowicz and Dr. Zeny Feng for help with designing and structuring the pipeline.
-# Adapted lines 102-106, 126-132, and 135-137 from code shared in Stack Overflow discussion:
+# Adapted lines from code shared in Stack Overflow discussion:
 # Author: https://stackoverflow.com/users/1312519/by0.
 # https://stackoverflow.com/questions/12866189/calculating-the-outliers-in-r.
 # Author: https://stackoverflow.com/users/271678/fotnelton.
@@ -11,11 +11,11 @@
 # Author: https://stackoverflow.com/users/235349/ramnath.
 # https://stackoverflow.com/questions/7069076/split-column-at-delimiter-in-data-frame.
 
-# This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+# This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License 
+# as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
 
-# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty 
+# of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
 
 # There is a copy of the GNU General Public License along with this program in the repository where it is located. 
 # Or view it directly here at http://www.gnu.org/licenses/
@@ -30,6 +30,8 @@
 # For data manipulation:
 #install.packages("data.table")
 library(data.table)
+#install.packages(stringr)
+library(stringr)
 #install.packages("foreach")
 library(foreach)
 #install.packages("reshape")
@@ -51,29 +53,16 @@ source("RemoveSequences.R")
 
 ################################################################################
 
-# Here, extremely gappy/ungappy sequences are removed. These sequences areassumed to contribute to misalignment of the 
+# Here, extremely gappy/ungappy sequences are removed. These sequences are assumed to contribute to misalignment of the 
 # sequences or may even be pseudogenes. Manual checking of the alignment is recommended.
-# This will give the number of positions where an *internal* N or gap is found for each sequence.
-internalGaps <- sapply(regmatches(dfCheckCentroidSeqs$nucleotides, gregexpr("[-+]", dfCheckCentroidSeqs$nucleotides)), length)
-# Mean gap length and range.
-meanGap <- mean(internalGaps)
-extremeHighGap <- meanGap + 7  # Upper range.
-extremeLowGap <- meanGap - 7  # Lower range.
-# We then loop through each sequence to see if the number of gaps deviates greatly from the mean.
-# Which sequences exceed the range of meanGap +/- 7?
-extremeSeqs <- sapply(internalGaps, function(x) which(x > extremeHighGap | x < extremeLowGap))
-# The "deviant" sequences will be flagged with a 1.
-extremeBins <- which(extremeSeqs > 0)
-# Subset out these sequences to look at them if desired.
-dfExtreme <- dfCheckCentroidSeqs[extremeBins, ]
-# Make sure outgroups are not removed by uncommenting the following lines and filling in your outgroup family name(s).
-#goodBins <- which(dfExtreme$order_name == "" | dfExtreme$order_name == "Coelacanthiformes")
-#if (length(goodBins) > 1) {
-  #dfExtreme <- dfExtreme[-goodBins, ]
-#}
-# Remove the gappy sequences from dfCentroidSeqs as we will be retrimming these 
-# sequences again once troublesome cases are removed.
-dfCentroidSeqs <- RemoveSequences(dfCentroidSeqs, dfExtreme$bin_uri)
+# Determine the number of positions where an *internal* N or gap is found for each sequence.
+dfCheckCentroidSeqs[, internal_gapN := str_count(nucleotides, c("[-+]"))]
+# Which sequences are NOT within the range of mean number of gaps in the centroid sequences +/- 7? These represent extremely gappy sequences.
+dfGappySeqs <- dfCheckCentroidSeqs[!internal_gapN %between% c(mean(internal_gapN) - 7, mean(internal_gapN) + 7)]
+# Make sure outgroups are not included in the dfGappySeqs!
+dfGappySeqs <- dfGappySeqs[!species_name %in% outgroups]
+# Remove the gappy sequences from the original dfCentroidSeqs as we will be realigning these sequences again once troublesome cases are removed.
+dfCentroidSeqs <- RemoveSequences(dfCentroidSeqs, dfGappySeqs$bin_uri)
 
 ### OUTLIER CHECK ###
 # Remove centroid sequences whose genetic distances to all other sequences fall outside the typical range of genetic divergence for this group of organisms.

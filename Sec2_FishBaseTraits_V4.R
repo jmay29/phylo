@@ -14,7 +14,7 @@
 # There is a copy of the GNU General Public License along with this program in the repository where it is located. 
 # Or view it directly here at http://www.gnu.org/licenses/
 
-##################################################################################################################
+#############################################################################################################################
 
 ##### SECTION 2: TRAIT ASSIGNMENT #####
 # This section is designed to assign trait data from BOLD and FishBase and match it to BOLD sequence data. The version here 

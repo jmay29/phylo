@@ -5,7 +5,7 @@ RemoveSequences <- function(x, y) {
     print ("There are no sequences to remove!")
   }
   else if (length(y) > 0) {
-    x <- x[!x$bin_uri %in% y]
+    x <- x[!x$species_name %in% y]
   }
   return(x)
 }

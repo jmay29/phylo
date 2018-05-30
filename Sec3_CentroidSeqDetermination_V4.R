@@ -14,7 +14,7 @@
 # There is a copy of the GNU General Public License along with this program in the repository where it is located. 
 # Or view it directly here at http://www.gnu.org/licenses/
 
-################################################################################
+#############################################################################################################################
 
 ##### SECTION 3: CENTROID SEQUENCE DETERMINATION #####
 # This section is designed to select a centroid sequence for each BIN. A centroid sequence is the sequence in a BIN with minimum sum of pairwise
@@ -37,7 +37,7 @@ library(foreach)
 # Load the function(s) designed for this script:
 source("RefSeqTrim.R")
 
-################################################################################
+#############################################################################################################################
 
 # Subset dataframe to find BINs with more than one sequence.
 largeBins <- dfPreCentroid[filtered_bin_size > 1]
@@ -78,7 +78,6 @@ if (nrow(largeBins) > 0) {
   dfCentroidSeqs <- dfPreCentroid
 }
 
-################################################################################
 # REFERENCE SEQUENCE TRIMMING #
 # Trim the centroid sequences according to a standardized reference sequence. Currently, a standard length (658 bp) COI-5P sequence from 
 # Perca flavescens (yellow perch) is being used to trim Actinopterygii barcode sequences.

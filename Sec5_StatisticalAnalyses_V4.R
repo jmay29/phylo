@@ -22,7 +22,7 @@
 # There is a copy of the GNU General Public License along with this program in the repository where it is located. 
 # Or view it directly here at http://www.gnu.org/licenses/
 
-################################################################################
+#############################################################################################################################
 
 ##### SECTION 5: STATISTICAL ANALYSES #####
 # This section is designed to perform single variable and multivariable analyses regression analyses while controlling for phylogeny. The main objective is to
@@ -56,7 +56,7 @@ source("TestPhyloSig.R")
 source("PGLS.R")
 source("MergeAndPGLS.R")
 
-################################################################################
+#############################################################################################################################
 
 # A phylogenetic tree containing branch length data for your species is required for this section.
 # Read in your phylogenetic tree.

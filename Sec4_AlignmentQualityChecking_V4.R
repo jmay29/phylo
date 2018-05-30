@@ -6,6 +6,8 @@
 # Adapted lines from code shared in Stack Overflow discussion:
 # Author: https://stackoverflow.com/users/1312519/by0.
 # https://stackoverflow.com/questions/12866189/calculating-the-outliers-in-r.
+# Author: https://stackoverflow.com/users/2474755/j-r.
+# https://stackoverflow.com/questions/27892100/distance-matrix-to-pairwise-distance-list-in-r.
 
 # This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License 
 # as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -49,7 +51,7 @@ source("RemoveSequences.R")
 
 #############################################################################################################################
 
-### QUALITY CHECK 1: GAPPY SEQUENCE REMOVAL ###
+### QUALITY CHECK 1: GAPPY SEQUENCES ###
 # Here, extremely gappy/ungappy sequences are removed. These sequences are assumed to contribute to misalignment of the 
 # sequences or may even be pseudogenes. Manual checking of the alignment is recommended.
 # Determine the number of positions where an *internal* N or gap is found for each sequence.
@@ -61,7 +63,7 @@ dfGappySeqs <- dfGappySeqs[!species_name %in% outgroups]
 # Remove the gappy sequences from the original dfCentroidSeqs as we will be realigning these sequences again once troublesome cases are removed.
 dfCentroidSeqs <- RemoveSequences(dfCentroidSeqs, dfGappySeqs$species_name)
 
-### QUALITY CHECK 2: OUTLIER REMOVAL ###
+### QUALITY CHECK 2: OUTLIERS ###
 # Remove centroid sequences whose genetic distances to all other sequences fall outside the typical range of genetic divergence for this group of organisms.
 # First, convert the sequences to DNAbin format so we can build a distance matrix.
 DNABinNN <- DNAStringSet(dfCheckCentroidSeqs$nucleotides)
@@ -91,48 +93,25 @@ dfCentroidSeqs <- RemoveSequences(dfCentroidSeqs, dfOutliers$species_name)
 # Remove centroid sequences whose close neighbours are in a different order or family. Close neighbours can be determined 
 # from the distance matrix. They are sequences that are within a genetic distance of 0.05. If these neighbours are in a different
 # order or family, this may be indicative of something weird going on in either the sequence data or taxonomic assignment. 
-# First, subset out all close neighbour pairings that share a genetic distance under 0.05 to any other sequence.
-dfGeneticDistance <- as.data.frame(distanceMatrix)
-closeNeighbours <- which(dfGeneticDistance < 0.05, arr.ind = TRUE)
-# Take the names of the BINs and nearest neighbours and convert to dataframe.
-dfCloseNeighbours <- as.data.frame(row.names(dfGeneticDistance[closeNeighbours[, 1],] ))
-colnames(dfCloseNeighbours)[1] <- "bins"
-dfCloseNeighbours$neighbour <- colnames(dfGeneticDistance[closeNeighbours[, 2]])
-# Extract the order and family names of the BINs and their close neighbours.
-dfBinOrd <- dfCheckCentroidSeqs[match(dfCloseNeighbours$bins, dfCheckCentroidSeqs$species_name), ] 
-dfNeighbourOrd <- dfCheckCentroidSeqs[match(dfCloseNeighbours$neighbour, dfCheckCentroidSeqs$bin_uri), ] 
-# Assign to dfCloseNeighbours.
-dfCloseNeighbours <- as.data.table(dfCloseNeighbours)
-dfCloseNeighbours[, bin_order := dfBinOrd$order_name][, bin_family := dfBinOrd$family_name]
-dfCloseNeighbours[, nn_order := dfNeighbourOrd$order_name][, nn_family := dfNeighbourOrd$family_name]
-# Some BINs have multiple close neighbours and were assigned extra numbers in the dataframe (e.g. ACFGGF, ACFGGF.1). 
-# To resolve this, use the function na.locf() from the "zoo" package to fill in missing data based on the data in the row above.
-# This section seems to agree better with dataframes at the moment.
-dfCloseNeighbours <- as.data.frame(dfCloseNeighbours)
-# Make sure they are in the correct order in the "bins" column.
-dfCloseNeighbours <- dfCloseNeighbours[order(dfCloseNeighbours$bins), ]
-# Fill in the bin_order column.
-dfCloseNeighbours$bin_order <- na.locf(dfCloseNeighbours$bin_order)
-# Fill in the bin_family column.
-dfCloseNeighbours$bin_family <- na.locf(dfCloseNeighbours$bin_family)
-# Do the same for the neighbour BINs.
-dfCloseNeighbours <- dfCloseNeighbours[order(dfCloseNeighbours$neighbour), ]
-dfCloseNeighbours$nn_order <- na.locf(dfCloseNeighbours$nn_order)
-dfCloseNeighbours$nn_family <- na.locf(dfCloseNeighbours$nn_family)
-# Convert back to datatable.
-dfCloseNeighbours <- as.data.table(dfCloseNeighbours)
-# Trim the BIN URIs to remove the added numbers.
-dfCloseNeighbours[, bins := substr(bins, 1, 7)]
-dfCloseNeighbours[, neighbour := substr(neighbour, 1, 7)]
-# Now, which orders do not match between bin_order and nn_order?
-nonmatchOrd <- which(dfCloseNeighbours$bin_order != dfCloseNeighbours$nn_order)
-dfNonmatchOrd <- dfCloseNeighbours[nonmatchOrd, ]
-# Again, remove non-matching BINs if desired:
-dfCentroidSeqs <- RemoveSequences(dfCentroidSeqs, unique(dfNonmatchOrd$bin_uri))
-# Which families do not match between bin_family and nn_family?
-dfNonmatchFam <- dfCloseNeighbours[which(dfCloseNeighbours$bin_family != dfCloseNeighbours$nn_family)]
-# To remove:
-dfCentroidSeqs <- RemoveSequences(dfCentroidSeqs, unique(dfNonmatchFam$bin_uri))
+dfGeneticDistance <- as.data.table(distanceMatrix)
+# Convert the distance matrix to a datatable with the names of the species pairs and their distances.
+dfGeneticDistance <- data.table(t(combn(names(dfGeneticDistance), 2)), distance = t(dfGeneticDistance)[lower.tri(dfGeneticDistance)])
+setnames(dfGeneticDistance, old = c("V1", "V2"), new = c("species_1", "species_2"))
+# Subset out all close neighbour pairings that share a genetic distance under 0.05 to any other sequence.
+dfGeneticDistance <- dfGeneticDistance[distance < 0.05]
+# Get the order and families names of the species from dfCentroidSeqs.
+dfGeneticDistance <- merge(dfGeneticDistance, dfCentroidSeqs[, c(1, 5:6)], by.x = "species_1", by.y = "species_name")
+dfGeneticDistance <- merge(dfGeneticDistance, dfCentroidSeqs[, c(1, 5:6)], by.x = "species_2", by.y = "species_name")
+setnames(dfGeneticDistance, old = c("order_name.x", "family_name.x", "order_name.y", "family_name.y"), 
+         new = c("order_1", "family_1", "order_2", "family_2"))
+# Now, which orders do not match between order_1 and order_2?
+dfMismatchOrders <- dfGeneticDistance[order_1 != order_2]
+# Remove these species from dfCentroidSeqs if desired:
+dfCentroidSeqs <- RemoveSequences(dfCentroidSeqs, c(unique(dfMismatchOrders$species_1), unique(dfMismatchOrders$species_2)))
+# Now, which families do not match between family_1 and family_2?
+dfMismatchFamilies <- dfGeneticDistance[family_1 != family_2]
+# Remove these species from dfCentroidSeqs if desired:
+dfCentroidSeqs <- RemoveSequences(dfCentroidSeqs, c(unique(dfMismatchFamilies$species_1), unique(dfMismatchFamilies$species_2)))
 
 ### OUTGROUP CHECK ###
 # Which outgroups made the cut? Remove them from dfCentroidSeqs so I can build a tree just using the ingroup 

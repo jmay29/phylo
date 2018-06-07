@@ -40,7 +40,7 @@ source("AssignLabel.R")
 # Download sequences from BOLD using the function bold_seqspec() for sequence and specimen data. 
 # In addition, I am only selecting those columns needed for downstream analysis.
 # Enter your taxon between the "".
-dfRawSeqs <- bold_seqspec(taxon = "Cyclopteridae", geo = "all")[, c("recordID", "bin_uri", "order_name", "family_name", 
+dfRawSeqs <- bold_seqspec(taxon = "Scorpaeniformes", geo = "all")[, c("recordID", "bin_uri", "order_name", "family_name", 
                                                                       "genus_name", "species_name", "lat", "nucleotides", 
                                                                       "markercode")]
 
@@ -51,6 +51,8 @@ outgroups <- c("Neoceratodus forsteri")
 dfOutgroup <- bold_seqspec(taxon = outgroups, geo = "all")[, c("recordID", "bin_uri", "order_name", "family_name", 
                                                                "genus_name", "species_name", "lat", "nucleotides", 
                                                                "markercode")]
+# Going to need these names later on.
+outgroups <- unique(dfOutgroup$species_name)
 # Combine dfOutgroup and dfRawSeqs so that they are in one useable dataframe. Also, convert to datatable as datatables 
 # have useful features for data manipulation.
 dfFiltered <- as.data.table(rbind(dfRawSeqs, dfOutgroup))

@@ -195,5 +195,5 @@ dfPreCentroid <- merge(dfFiltered, dfTraits, by = "species_name")[, 1:8]
 setnames(dfPreCentroid, old = c('bin_uri.x', 'filtered_bin_size.x'), new = c('bin_uri', 'filtered_bin_size'))
 
 # Remove objects that are not needed for Section 3.
-rm(speciesNames, salinities, integerVars, missing); rm(dfBoldBase, dfFishBase, dfFilteredSingle)
+rm(speciesNames, salinities, integerVars, missing); rm(dfBoldBase, dfFishBase, dfFilteredSingle, dfResolve)
 rm(dfLatitude, dfSpecies, dfSpeciesTraits, dfEcology, dfEcologyTraits, dfReproduction, dfReproTraits)

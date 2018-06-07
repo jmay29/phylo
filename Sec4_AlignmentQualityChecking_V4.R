@@ -30,10 +30,6 @@
 library(data.table)
 #install.packages(stringr)
 library(stringr)
-#install.packages("foreach")
-library(foreach)
-#install.packages("reshape")
-library(reshape)
 # For multiple sequence alignments:
 #install.packages("ape")
 library(ape)
@@ -42,9 +38,6 @@ library(ape)
 library(Biostrings)
 #biocLite("muscle")
 library(muscle)
-# For missing data:
-#install.packages("zoo")
-library(zoo)
 # Load the function(s) designed for this script:
 source("RefSeqTrim.R")
 source("RemoveSequences.R")
@@ -114,22 +107,22 @@ dfMismatchFamilies <- dfGeneticDistance[family_1 != family_2]
 dfCentroidSeqs <- RemoveSequences(dfCentroidSeqs, c(unique(dfMismatchFamilies$species_1), unique(dfMismatchFamilies$species_2)))
 
 ### OUTGROUP CHECK ###
-# Which outgroups made the cut? Remove them from dfCentroidSeqs so I can build a tree just using the ingroup 
+# Which outgroups made it pass the filters? Remove them from dfCentroidSeqs to build a tree just using the ingroup 
 # (so that inclusion of outgroups in the tree building process doesn't affect the branch length estimates of the in-group).
-outgroupSpecies <- unique(dfOutgroup$species_name)
-dfGoodOutgroups <- dfCentroidSeqs[dfCentroidSeqs$species_name %in% outgroupSpecies]
-# Remove the outgroups from dfCentroidSeqs.
-dfCentroidSeqsNO <- dfCentroidSeqs[!dfCentroidSeqs$species_name %in% outgroupSpecies]
+dfGoodOutgroups <- dfCentroidSeqs[dfCentroidSeqs$species_name %in% outgroups]
+# Remove the outgroups from dfCentroidSeqs and rename it to indicate that it does not include the outgroup (NO = no outgroup).
+dfCentroidSeqsNO <- dfCentroidSeqs[!dfCentroidSeqs$species_name %in% outgroups]
 # Now, re-trim and align the sequences without the outgroups.
 dfCentroidSeqsNO <- RefSeqTrim(dfCentroidSeqsNO)
 # Once finished, make sure to check over sequences/alignment, and make sure they are in the correct reading frame. 
 # Make sure to save the resulting alignments under a different name, or save in a new directory so they are not replaced.
 # Now re-run the alignment including outgroups (pick outgroup species that are well represented and that serve as an appropriate 
 # outgroup to your taxa).
-# Enter your chosen outgroup species between the "".
-goodOG <- which(dfCentroidSeqs$species_name == "Neoceratodus forsteri")
-mergeOG <- dfCentroidSeqs[goodOG, ]
-# Add them back.
-dfCentroidSeqsWithOG <- rbind(dfCentroidSeqsNO, mergeOG)
+# Rename dfCentroidSeqs to indicate that it includes the outgroup (WO = with outgroup.)
+dfCentroidSeqsWO <- dfCentroidSeqs
 # Run the alignment with outgroups included.
-dfCentroidSeqsWithOG <- RefSeqTrim(dfCentroidSeqsWithOG)
+dfCentroidSeqsWO <- RefSeqTrim(dfCentroidSeqsWO)
+
+# Remove objects that are not required for Section 5.
+rm(DNABinNN, first_time, iqr, lowerQuantile, upperQuantile, upperThreshold, distanceMatrix) 
+rm(dfCentroidSeqs, dfCheckCentroidSeqs, dfGappySeqs, dfGeneticDistance, dfOutliers, dfMismatchOrders, dfMismatchFamilies, dfGoodOutgroups)

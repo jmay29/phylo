@@ -40,15 +40,15 @@ source("RefSeqTrim.R")
 #############################################################################################################################
 
 # Subset dataframe to find BINs with more than one sequence.
-largeBins <- dfPreCentroid[filtered_bin_size > 1]
+dfLargeBins <- dfPreCentroid[filtered_bin_size > 1]
 # If there is at least one BIN with more than one sequence...
-if (nrow(largeBins) > 0) {
+if (nrow(dfLargeBins) > 0) {
   # Remove gaps from the sequences.
   dfPreCentroid[, nucleotides := gsub("-", "", nucleotides)] 
   # Subset out the BINs with more than 1 sequence.
-  dfCentroidSeqs <- dfPreCentroid[bin_uri %in% largeBins$bin_uri]
+  dfCentroidSeqs <- dfPreCentroid[bin_uri %in% dfLargeBins$bin_uri]
   # We also have to create another separate dataframe with BINs that only have one sequence, called dfSingletons.
-  dfSingletons <- dfPreCentroid[!bin_uri %in% largeBins$bin_uri]
+  dfSingletons <- dfPreCentroid[!bin_uri %in% dfLargeBins$bin_uri]
   # We then take the dfCentroidSeqs sequences and group them by BIN.
   largeBinList <- split(dfCentroidSeqs, by = "bin_uri")
   # Convert all the sequences in largeBinList to DNAStringSet format for 

@@ -114,7 +114,7 @@ dfTraits <- dfTraits[match(mainTree$tip.label, dfTraits$species_name), ]
 # We will do this by looping through all of the columns containing the trait data using lapply.
 traits <- as.list(colnames(dfTraits[, 4:13]))
 # Set to dataframe.
-data <- as.data.frame(dfTraits)
+dfTraits <- as.data.frame(dfTraits)
 # Start the loop.
 singleVarResults <- lapply(traits, function(x) {
   # We only want the columns containing species name and dependent and independent variables.

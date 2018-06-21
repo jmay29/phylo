@@ -3,12 +3,12 @@
 
 # Contributions & Acknowledgements #
 # Dr. Sarah J. Adamowicz and Dr. Zeny Feng for help with designing and structuring the pipeline.
-# Adapted lines from code shared in Stack Overflow discussion:
+# Adapted lines 87-91 and 147-149 from code shared in Stack Overflow discussion:
 # Author: https://stackoverflow.com/users/1312519/by0.
 # https://stackoverflow.com/questions/12866189/calculating-the-outliers-in-r.
 # Author: https://stackoverflow.com/users/580110/henk.
 # https://stackoverflow.com/questions/24016612/subset-of-data-frame-columns-to-maximize-complete-observations.
-# Used as general guide for PGLS analyses (lines 172-255 and 319-358):
+# Used as general guide for PGLS analyses (lines 197-224):
 # Mundry, R. (2014). Statistical Issues and Assumptions of Phylogenetic Generalized Least Squares. In L.Z. Garamszegi (Ed.), 
 # Modern Phylogenetic Comparative Methods and Their Application in Evolutionary Biology. Online Practice Materials.
 # URL: http://www.mpcm-evolution.org/practice/online-practical-material-chapter-6/chapter-6-1exercises-testing-assumptions-statistical-issues-framework-phylogenetic-generalized-least-squares
@@ -227,6 +227,7 @@ BIC(global, fit1, fit2, fit3)
 
 # GRAPHS #
 # For example, plot branch_length against median_lat.
+# Note: this data is uncorrected for phylogeny at the moment.
 fit <- lm(branch_length ~ median_lat, data = dfMultivariableCut)
 dfMultivariableCut %>%  plot_ly(x = ~median_lat) %>% 
   add_markers(y = ~branch_length) %>% 

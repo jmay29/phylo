@@ -3,7 +3,7 @@
 
 # Contributions & Acknowledgements #
 # Dr. Sarah J. Adamowicz and Dr. Zeny Feng for help with designing and structuring the pipeline.
-# Centroid sequence selection designed by Matt Orton (https://github.com/m-orton/R-Scripts).
+# Centroid sequence selection designed by Matt Orton (https://github.com/m-orton/R-Scripts) (lines 42-79).
 
 # This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or (at your option) any later version.

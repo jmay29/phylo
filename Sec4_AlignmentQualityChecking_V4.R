@@ -3,7 +3,7 @@
 
 # Contributions & Acknowledgements #
 # Dr. Sarah J. Adamowicz and Dr. Zeny Feng for help with designing and structuring the pipeline.
-# Adapted lines from code shared in Stack Overflow discussion:
+# Adapted lines 68-71 and 91 from code shared in Stack Overflow discussion:
 # Author: https://stackoverflow.com/users/1312519/by0.
 # https://stackoverflow.com/questions/12866189/calculating-the-outliers-in-r.
 # Author: https://stackoverflow.com/users/2474755/j-r.

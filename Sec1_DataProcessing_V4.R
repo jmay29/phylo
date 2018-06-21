@@ -3,7 +3,7 @@
 
 # Contributions & Acknowledgements #
 # Dr. Sarah J. Adamowicz and Dr. Zeny Feng for help with designing and structuring the pipeline.
-# Matthew Orton (https://github.com/m-orton/R-Scripts) for testing/contributions to the sequence filters.
+# Matthew Orton (https://github.com/m-orton/R-Scripts) for testing/contributions to the sequence filters (lines 60-102).
 # Dr. Robert Hanner for recommendations about how to deal with BIN data.
 
 # This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License 

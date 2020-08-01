@@ -1,5 +1,5 @@
-# # Copyright (C) 2018 Jacqueline May.
-# Program Description: Multivariable analysis of environmental and biological correlates affecting fish molecular evolution rates.
+# # Copyright (C) 2020 Jacqueline May.
+# Program Description: Multivariable analysis of environmental and biological correlates affecting molecular evolution rates.
 
 # Contributions & Acknowledgements #
 # Dr. Sarah J. Adamowicz and Dr. Zeny Feng for help with designing and structuring the pipeline.
@@ -9,16 +9,13 @@
 # Author: https://stackoverflow.com/users/2474755/j-r.
 # https://stackoverflow.com/questions/27892100/distance-matrix-to-pairwise-distance-list-in-r.
 
-# This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License 
-# as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+# This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
 
-# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty 
-# of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
 
-# There is a copy of the GNU General Public License along with this program in the repository where it is located. 
-# Or view it directly here at http://www.gnu.org/licenses/
+# There is a copy of the GNU General Public License along with this program in the repository where it is located. Or view it directly here at http://www.gnu.org/licenses/
 
-#############################################################################################################################
+#################################################################################################################
 
 ##### SECTION 4: ALIGNMENT QUALITY CHECKING #####
 # This section performs alignment quality control checking by removing extremely gappy sequences, outliers, and BINs that have neighbours in a 
@@ -42,11 +39,10 @@ library(muscle)
 source("RefSeqTrim.R")
 source("RemoveSequences.R")
 
-#############################################################################################################################
+#################################################################################################################
 
 ### QUALITY CHECK 1: GAPPY SEQUENCES ###
-# Here, extremely gappy/ungappy sequences are removed. These sequences are assumed to contribute to misalignment of the 
-# sequences or may even be pseudogenes. Manual checking of the alignment is recommended.
+# Here, extremely gappy/ungappy sequences are removed. These sequences are assumed to contribute to misalignment of the sequences or may even be pseudogenes. Manual checking of the alignment is recommended.
 # Determine the number of positions where an *internal* N or gap is found for each sequence.
 dfCheckCentroidSeqs[, internal_gapN := str_count(nucleotides, c("[-+]"))]
 # Which sequences are NOT within the range of mean number of gaps in the centroid sequences +/- 7? These represent extremely gappy sequences.
@@ -83,9 +79,7 @@ dfOutliers <- dfOutliers[!species_name %in% outgroups]
 dfCentroidSeqs <- RemoveSequences(dfCentroidSeqs, dfOutliers$species_name)
 
 ### QUALITY CHECK 3: CLOSE NEIGHBOUR TAXONOMY ###
-# Remove centroid sequences whose close neighbours are in a different order or family. Close neighbours can be determined 
-# from the distance matrix. They are sequences that are within a genetic distance of 0.05. If these neighbours are in a different
-# order or family, this may be indicative of something weird going on in either the sequence data or taxonomic assignment. 
+# Remove centroid sequences whose close neighbours are in a different order or family. Close neighbours can be determined from the distance matrix. They are sequences that are within a genetic distance of 0.05. If these neighbours are in a different order or family, this may be indicative of something weird going on in either the sequence data or taxonomic assignment. 
 dfGeneticDistance <- as.data.table(distanceMatrix)
 # Convert the distance matrix to a datatable with the names of the species pairs and their distances.
 dfGeneticDistance <- data.table(t(combn(names(dfGeneticDistance), 2)), distance = t(dfGeneticDistance)[lower.tri(dfGeneticDistance)])
@@ -107,22 +101,19 @@ dfMismatchFamilies <- dfGeneticDistance[family_1 != family_2]
 dfCentroidSeqs <- RemoveSequences(dfCentroidSeqs, c(unique(dfMismatchFamilies$species_1), unique(dfMismatchFamilies$species_2)))
 
 ### OUTGROUP CHECK ###
-# Which outgroups made it pass the filters? Remove them from dfCentroidSeqs to build a tree just using the ingroup 
-# (so that inclusion of outgroups in the tree building process doesn't affect the branch length estimates of the in-group).
+# Which outgroups made it pass the filters? Remove them from dfCentroidSeqs to build a tree just using the ingroup (so that inclusion of outgroups in the tree building process doesn't affect the branch length estimates of the in-group).
 dfGoodOutgroups <- dfCentroidSeqs[dfCentroidSeqs$species_name %in% outgroups]
 # Remove the outgroups from dfCentroidSeqs and rename it to indicate that it does not include the outgroup (NO = no outgroup).
 dfCentroidSeqsNO <- dfCentroidSeqs[!dfCentroidSeqs$species_name %in% outgroups]
 # Now, re-trim and align the sequences without the outgroups.
 dfCentroidSeqsNO <- RefSeqTrim(dfCentroidSeqsNO)
-# Once finished, make sure to check over sequences/alignment, and make sure they are in the correct reading frame. 
-# Make sure to save the resulting alignments under a different name, or save in a new directory so they are not replaced.
-# Now re-run the alignment including outgroups (pick outgroup species that are well represented and that serve as an appropriate 
-# outgroup to your taxa).
+# Once finished, make sure to check over sequences/alignment, and make sure they are in the correct reading frame. Make sure to save the resulting alignments under a different name, or save in a new directory so they are not replaced.
+# Now re-run the alignment including outgroups (pick outgroup species that are well represented and that serve as an appropriate outgroup to your taxa).
 # Rename dfCentroidSeqs to indicate that it includes the outgroup (WO = with outgroup.)
 dfCentroidSeqsWO <- dfCentroidSeqs
 # Run the alignment with outgroups included.
 dfCentroidSeqsWO <- RefSeqTrim(dfCentroidSeqsWO)
 
 # Remove objects that are not required for Section 5.
-rm(DNABinNN, first_time, iqr, lowerQuantile, upperQuantile, upperThreshold, distanceMatrix) 
+rm(DNABinNN, iqr, lowerQuantile, upperQuantile, upperThreshold, distanceMatrix) 
 rm(dfCentroidSeqs, dfCheckCentroidSeqs, dfGappySeqs, dfGeneticDistance, dfOutliers, dfMismatchOrders, dfMismatchFamilies, dfGoodOutgroups)

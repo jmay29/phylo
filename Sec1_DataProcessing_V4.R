@@ -34,7 +34,7 @@ source("AssignLabel.R")
 ################################################################################################
 
 # Download sequences from BOLD using the function bold_seqspec() for sequence and specimen data. In addition, I am only selecting those columns needed for downstream analysis. Enter your taxon between the "".
-dfRawSeqs <- bold_seqspec(taxon = "Scorpaeniformes", geo = "all")[, c("recordID", "bin_uri", "order_name", "family_name", "genus_name", "species_name", "lat", "nucleotides", "markercode")]
+dfRawSeqs <- bold_seqspec(taxon = "Gobiiformes", geo = "all")[, c("recordID", "bin_uri", "order_name", "family_name", "genus_name", "species_name", "lat", "nucleotides", "markercode")]
 
 # Download outgroup species data from BOLD. These sequences may be used to root phylogenetic trees (depending if the taxa are an appropriate outgroup for the organismal group under study).
 # Enter your outgroup name between the "".

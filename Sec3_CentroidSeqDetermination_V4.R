@@ -79,4 +79,4 @@ if (nrow(dfLargeBins) > 0) {
 dfCheckCentroidSeqs <- RefSeqTrim(dfCentroidSeqs)
 
 # Remove objects that are not required for Section 4.
-rm(dfPreCentroid, dfLargeBins, dfSingletons); rm(largeBinList, distanceMatrixList, DNAStringSetList)
+rm(dfPreCentroid, dfLargeBins, dfSingletons, largeBinList, distanceMatrixList, DNAStringSetList)

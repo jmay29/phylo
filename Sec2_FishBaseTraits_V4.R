@@ -1,25 +1,20 @@
-# Copyright (C) 2018 Jacqueline May.
-# Program Description: Multivariable analysis of environmental and biological correlates affecting fish molecular evolution rates.
+# Copyright (C) 2020 Jacqueline May.
+# Program Description: Multivariable analysis of environmental and biological correlates affecting molecular evolution rates.
 
 # Contributions & Acknowledgements #
 # Dr. Sarah J. Adamowicz and Dr. Zeny Feng for help with designing and structuring the pipeline.
 # Matt Orton (https://github.com/m-orton/R-Scripts) for contributions to the latitude trait section (lines 39-46).
 
-# This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License 
-# as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+# This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
 
-# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
 
-# There is a copy of the GNU General Public License along with this program in the repository where it is located. 
-# Or view it directly here at http://www.gnu.org/licenses/
+# There is a copy of the GNU General Public License along with this program in the repository where it is located. Or view it directly here at http://www.gnu.org/licenses/
 
-#############################################################################################################################
+#########################################################################################################
 
 ##### SECTION 2: TRAIT ASSIGNMENT #####
-# This section is designed to assign trait data from BOLD and FishBase and match it to BOLD sequence data. The version here 
-# is a shortened version and only considers a subset of traits. Many more traits are available on FishBase and can be easily 
-# accessed using the package rfishbase.
+# This section is designed to assign trait data from BOLD and FishBase and match it to BOLD sequence data. The version here is a shortened version and only considers a subset of traits. Many more traits are available on FishBase and can be easily accessed using the package rfishbase.
 
 ### PACKAGES REQUIRED ###
 # For data manipulation:
@@ -34,10 +29,10 @@ library(rfishbase)
 source("GetTraitSpecificDataBIN.R")
 source("GetTraitInfo.R")
 
-#############################################################################################################################
+#################################################################################################################
 
 ### TRAIT: MEDIAN LATITUDE ###
-# Currently, latitude is the only trait whose information is taken from BOLD. The rest of the data will be obtained from FishBase.
+# Currently, latitude is the only trait data we are taking from BOLD. The rest of the data will be obtained from FishBase.
 # Filtering for presence of a latitude value.
 dfLatitude <- dfFiltered[lat %like% "[0-9]"]
 # Conversion to absolute values before median latitude values are calculated.
@@ -51,17 +46,14 @@ dfLatitude <- as.data.table(GetTraitSpecificDataBIN(dfLatitude, 15))
 setnames(dfLatitude, "species_label", "species_name")
 
 # In this pipeline, we will eventually be constructing a multivariable datatable once we have also downloaded the FishBase data.
-# While considering traits for eventual multivariable analyses, it is necessary for them to have a decent sample size 
-# (i.e. > nrows of data, depending on your purposes). In addition, they should exhibit some amount of variation 
-# across the observations (all of the observations shouldn't be in one category)!
+# While considering traits for eventual multivariable analyses, it is necessary for them to have a decent sample size (i.e. > nrows of data, depending on your purposes). In addition, they should exhibit some amount of variation across the observations (all of the observations shouldn't be in one category)!
 
 # The GetTraitInfo function can be used to obtain some information about the trait. 
 # Are there a decent number of observations for this trait? Is there variation in the trait?
 GetTraitInfo(dfLatitude$median_lat)
 
 # Datatable reorganization for dfFiltered. We are only keeping the labels we assigned and not the original taxonomic classifications.
-dfFiltered <- dfFiltered[, .(bin_uri, filtered_bin_size, recordID, order_name = order_label, family_name = family_label, 
-                             genus_name = genus_label, species_name = species_label, nucleotides)]
+dfFiltered <- dfFiltered[, .(bin_uri, filtered_bin_size, recordID, order_name = order_label, family_name = family_label, genus_name = genus_label, species_name = species_label, nucleotides)]
 
 ### FISHBASE TRAITS ###
 # In this section, traits from FishBase are extracted using the rfishbase package and matched against the information obtained from BOLD.
@@ -73,8 +65,7 @@ dfFishBase[, species_name := paste(Genus, Species)]
 dfFishBase <- dfFishBase[, .(species_name)]
 # Match the species labels from BOLD with the species names from FishBase. These are the species with records available on both BOLD and FishBase.
 dfBoldBase <- merge(dfFiltered, dfFishBase, by = "species_name")
-# Extract species' name as a vector if trying to access trait information for first time (aka if you haven't saved trait info in 
-# your current working directory (CWD) yet).
+# Extract species' name as a vector if trying to access trait information for first time (aka if you haven't saved trait info in your current working directory (CWD) yet).
 speciesNames <- unique(dfBoldBase$species_name)
 
 ### TRAIT ASSIGNMENT AND RECODING SECTION ###
@@ -88,11 +79,8 @@ write.csv(dfSpecies, file = "species_info.csv")
 # Read it back in as a datatable using the fread function.
 dfSpecies <- fread("species_info.csv")
 # Datatable reorganization and renaming. Renaming column names to keep variable syntax consistent throughout the pipeline.
-# We are looking at the traits body shape, maximum length (male_max_length and female_max_length) and salinity traits (freshwater, saltwater
-# and brackish) from this table. We also need to take the type of length that was measured (male_type_length and female_max_length).
-dfSpeciesTraits <- dfSpecies[, .(species_name = sciname, body_shape = BodyShapeI, male_max_length = Length, male_type_length = LTypeMaxM, 
-                                 female_max_length = LengthFemale, female_type_length = LTypeMaxF, freshwater = Fresh, 
-                                 saltwater = Saltwater, brackish = Brack)]
+# We are looking at the traits body shape, maximum length (male_max_length and female_max_length) and salinity traits (freshwater, saltwater and brackish) from this table. We also need to take the type of length that was measured (male_type_length and female_max_length).
+dfSpeciesTraits <- dfSpecies[, .(species_name = Species, body_shape = BodyShapeI, male_max_length = Length, male_type_length = LTypeMaxM, female_max_length = LengthFemale, female_type_length = LTypeMaxF, freshwater = Fresh, saltwater = Saltwater, brackish = Brack)]
 
 # TRAIT: Body shape.
 # Convert body_shape to factor type (the type that categorical traits should be coded for regression analysis).
@@ -134,7 +122,7 @@ dfEcology <- data.frame(ecology(speciesNames))
 write.csv(dfEcology, file = "ecology_info.csv") 
 dfEcology <- fread("ecology_info.csv")
 # Note: There is only one row per species in dfEcology.
-dfEcologyTraits <- dfEcology[, .(species_name = sciname, lakes = Lakes, oceanic = Oceanic, benthic = Benthic, diet_troph = DietTroph)]
+dfEcologyTraits <- dfEcology[, .(species_name = Species, lakes = Lakes, oceanic = Oceanic, benthic = Benthic, diet_troph = DietTroph)]
 # As only some of the variables are coded as integers right now, we need to recode them factor types.
 integerVars <- dfEcologyTraits[, lapply(.SD, is.integer)]
 integerVars <- which(integerVars == "TRUE")
@@ -163,7 +151,7 @@ dfReproduction <- data.frame(reproduction(speciesNames))
 write.csv(dfReproduction, file = "reproduction_info.csv") 
 dfReproduction <- fread("reproduction_info.csv")
 # Datatable reorganization and renaming.
-dfReproTraits <- dfReproduction[, .(species_name = sciname, repro_mode = ReproMode, parental_care = ParentalCare)]
+dfReproTraits <- dfReproduction[, .(species_name = Species, repro_mode = ReproMode, parental_care = ParentalCare)]
 # Unlikely to vary within species.
 dfReproTraits <- dfReproTraits[!duplicated(species_name)]
 # First, change the traits to factor type.
@@ -182,14 +170,12 @@ GetTraitInfo(dfReproTraits$parental_care)
 dfFilteredSingle <- dfFiltered[!duplicated(species_name)][, .(bin_uri, species_name, filtered_bin_size)]
 # Merge dfTraits with all of the FishBase data.
 dfTraits <- Reduce(function(...) merge(..., all = T, by = "species_name"), list(dfFilteredSingle, dfLatitude, dfSpeciesTraits, dfEcologyTraits, dfReproTraits))
-# Remove species that don't have ANY trait information available on either BOLD or FishBase (these BINs passed the filters but
-# do not have any trait data).
+# Remove species that don't have ANY trait information available on either BOLD or FishBase (these BINs passed the filters but do not have any trait data).
 missing <- dfTraits[, apply(.SD, 1, function(x) all(is.na(x))), .SDcols = 4:13]
 missing <- which(missing == TRUE)
 dfTraits <- dfTraits[!missing]
-# Merge back to dfFiltered to obtain all of the sequence information for each BIN. This is for creation of the master phylogeny.
-# dfPreCentroid contains only information needed for selection of the centroid sequences. dfTraits has all of the trait information
-# needed for downstream PGLS analyses.
+# Merge back to dfFiltered to obtain all of the sequence information for each BIN. This is for creation of the master phylogeny. 
+# dfPreCentroid contains only information needed for selection of the centroid sequences. dfTraits has all of the trait information needed for downstream PGLS analyses.
 dfPreCentroid <- merge(dfFiltered, dfTraits, by = "species_name")[, 1:8]
 # Dataframe reorganization and renaming.
 setnames(dfPreCentroid, old = c('bin_uri.x', 'filtered_bin_size.x'), new = c('bin_uri', 'filtered_bin_size'))

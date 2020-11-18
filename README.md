@@ -15,8 +15,3 @@ Section 4: This section performs alignment quality control checking by removing 
 Section 5: This section is designed to perform single variable and multivariable analyses regression analyses while controlling for phylogeny. The main objective is to identify those variables that contribute most to variation in molecular evolution rate.
 
 All code and required functions are available in the /Code folder. All associated data are available in the /Data folder.
-<<<<<<< HEAD
-
-
-=======
->>>>>>> 7a1727970fdd1d61e3728ae0f3344616d06234fe
